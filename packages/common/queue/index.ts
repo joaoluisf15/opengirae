@@ -1,9 +1,9 @@
 import { createNodeRedisClient, Queue, QueueEvents } from 'bullmq'
-import { createClient } from 'redis'
 import { COMMAND_QUEUE_NAME, RESPONSE_QUEUE_NAME, RESUME_QUEUE_NAME, QUICKVIEW_QUEUE_NAME, PAGE_QUEUE_NAME } from './constants'
+import { rawClient, ensureRedisConnected } from '../redis'
 
-export const rawClient = createClient({ url: process.env.REDIS_URL, RESP: 2 })
-await rawClient.connect()
+export { rawClient }
+await ensureRedisConnected()
 
 export const connection = createNodeRedisClient(rawClient)
 
