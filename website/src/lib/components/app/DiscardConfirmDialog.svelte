@@ -45,7 +45,7 @@
 
 <Dialog {opened} onBackdropClick={confirming ? undefined : onCancel}>
 	{#snippet title()}Deletar {cards.length > 1 ? `${cards.length} cards` : 'card'}?{/snippet}
-	<div class="flex flex-col gap-3">
+	<div class="flex max-h-[50vh] flex-col gap-3 overflow-y-auto">
 		{#each cards as card (card.id)}
 			<div class="flex items-center justify-between gap-3">
 				<span class="min-w-0 truncate text-black dark:text-white">{card.rarityEmoji} {card.name}</span>
