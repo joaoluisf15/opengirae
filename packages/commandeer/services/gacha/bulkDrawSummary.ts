@@ -8,7 +8,9 @@ const PAGE_SIZE = 10
 const SUMMARY_CACHE_TTL_SECONDS = 10 * 60
 
 const line = (r: BulkDrawResult) =>
-  `${r.isFromFavorite ? '⭐ ' : ''}${r.card.rarityEmoji} \`${r.card.id}\`. **${escapeMarkdown(r.card.name)}** _${escapeMarkdown(r.subcategoryName)}_${r.categoryEmoji ? ` ${r.categoryEmoji}` : ''}`
+  `${r.isFromFavorite ? '⭐ ' : ''}${r.card.rarityEmoji} \`${r.card.id}\`. **${escapeMarkdown(r.card.name)}** ${r.categoryEmoji} _${escapeMarkdown(r.subcategoryName)}_`
+
+const byRarity = (a: BulkDrawResult, b: BulkDrawResult) => a.card.rarityWeight - b.card.rarityWeight
 
 export interface BulkDrawSummaryData {
   header: string
@@ -26,8 +28,8 @@ export async function buildBulkDrawSummary(
     : `🎲 Você usou **${count}** giro${count === 1 ? '' : 's'}! Aqui está o que você ganhou:`
 
   const ordered = opts.splitFavorites
-    ? [...results.filter(r => r.isFromFavorite), ...results.filter(r => !r.isFromFavorite)]
-    : results
+    ? [...results.filter(r => r.isFromFavorite).sort(byRarity), ...results.filter(r => !r.isFromFavorite).sort(byRarity)]
+    : [...results].sort(byRarity)
 
   const dittoCards = ordered
     .filter(r => r.card.imageUrl)
