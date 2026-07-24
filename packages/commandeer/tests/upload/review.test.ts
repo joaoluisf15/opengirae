@@ -7,7 +7,7 @@ import { auditLogs } from "@girae/database/schemas/audit";
 import { eq } from "drizzle-orm";
 import UploadCommand from "../../commands/all/upload.cards";
 
-mockTelegram();
+const mock = mockTelegram();
 
 describe("/upload's cativeiroApprove/cativeiroReject QuickViews", () => {
   const fx = new TestFixtures();
@@ -48,8 +48,22 @@ describe("/upload's cativeiroApprove/cativeiroReject QuickViews", () => {
     const owned = await CardsDB.getUserCard(userId, cardId);
     expect(owned?.customMediaUrl).toBe('https://example.com/approved.jpg');
 
+    const decisionMessage = mock.sentMessages.find((m: any) => m.caption?.includes('APROVAÇÃO_DE_FOTO'));
+    expect(decisionMessage?.caption).toContain('🖼️ #APROVAÇÃO_DE_FOTO');
+
     const secondClick = await UploadCommand.cativeiroApprove(String(submissionId), reviewerPlatformId, 'telegram');
     expect(secondClick).toContain('já foi revisada');
+  });
+
+  test("approving a video submission uses the 🎥 emoji, not the photo one", async () => {
+    const submitResult = await CardsDB.createCativeiroSubmission(userId, cardId, 'https://example.com/approved.mp4', 'video', submitter);
+    const submissionId = submitResult.submission!.id;
+
+    const click = await UploadCommand.cativeiroApprove(String(submissionId), reviewerPlatformId, 'telegram');
+    expect(click).toBe('✅ Aprovado!');
+
+    const decisionMessage = mock.sentMessages.find((m: any) => m.caption?.includes('APROVAÇÃO_DE_VÍDEO'));
+    expect(decisionMessage?.caption).toContain('🎥 #APROVAÇÃO_DE_VÍDEO');
   });
 
   test("reject doesn't touch userCards and is a no-op on a second click", async () => {

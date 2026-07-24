@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { isEmojiOnly, containsRarityEmoji, validateCustomEmoji } from "../../services/cards/cativeiro";
+import { isEmojiOnly, containsRarityEmoji, validateCustomEmoji, isVideoLike } from "../../services/cards/cativeiro";
 
 describe("isEmojiOnly", () => {
   test.each(['🎉', '😅', '🥺', '👨‍👩‍👧'])("%s is accepted", (emoji) => {
@@ -40,5 +40,23 @@ describe("validateCustomEmoji", () => {
 
   test.each(['🥉', '🥈', '🥇'])("rejects the bot's own rarity marker %s with a friendly message", (emoji) => {
     expect(validateCustomEmoji(emoji)).toContain('raridade das cartas');
+  });
+});
+
+describe("isVideoLike", () => {
+  test("a real video is video-like", () => {
+    expect(isVideoLike({ isVideo: true })).toBe(true);
+  });
+
+  test("a GIF (isAnimatedPhoto) is bucketed as video-like too - the bot can't tell it apart from a real video reliably", () => {
+    expect(isVideoLike({ isAnimatedPhoto: true })).toBe(true);
+  });
+
+  test("a plain photo is not video-like", () => {
+    expect(isVideoLike({ isVideo: false, isAnimatedPhoto: false })).toBe(false);
+  });
+
+  test("undefined source is not video-like", () => {
+    expect(isVideoLike(undefined)).toBe(false);
   });
 });
