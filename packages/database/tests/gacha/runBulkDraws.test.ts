@@ -5,6 +5,7 @@ import { users } from "../../schemas/users";
 import { userCards, cardDrawHistory } from "../../schemas/cards";
 import { eq, and } from "drizzle-orm";
 import { GachaLogic } from "../../gacha";
+import { CardsDB } from "../../cards";
 
 describe("GachaLogic.runBulkDraws", () => {
   const fx = new TestFixtures();
@@ -128,6 +129,20 @@ describe("GachaLogic.runBulkDraws", () => {
 
     // fresh card for this user in this batch: previousCount 0, newCount = full batch size
     expect(countsByCard).toEqual([{ cardId: favCardId, previousCount: 0, newCount: results.length }]);
+
+    await db.delete(cardDrawHistory).where(eq(cardDrawHistory.userId, userId));
+    await db.delete(userCards).where(eq(userCards.userId, userId));
+  });
+
+  test("subcategoryName reflects the card's real main subcategory, not the one it was drawn from", async () => {
+    const cardId = (await fx.card({ name: "Test Bulk Multi-Sub Card", subcategoryId: favSubBId })).id;
+    await CardsDB.addCardSubcategory(cardId, favSubId);
+
+    const { draws: results } = await GachaLogic.runBulkDraws(userId, Array(20).fill(categoryId), 100, new Set([favSubId]));
+    const drawnAsTag = results.find(r => r.card.id === cardId && r.subcategoryId === favSubId);
+    expect(drawnAsTag).toBeDefined();
+    expect(drawnAsTag!.subcategoryName).not.toBe("Test Bulk Fav Sub");
+    expect(drawnAsTag!.subcategoryName).toBe("Test Bulk Fav Sub B");
 
     await db.delete(cardDrawHistory).where(eq(cardDrawHistory.userId, userId));
     await db.delete(userCards).where(eq(userCards.userId, userId));

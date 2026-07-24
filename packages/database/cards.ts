@@ -247,6 +247,17 @@ export class CardsDB {
       .onConflictDoNothing({ target: [cardSubcategories.cardId, cardSubcategories.subcategoryId] });
   })
 
+  static getCardSubcategoryEntry = maybeTransaction('getCardSubcategoryEntry', async (client, cardId: number, subcategoryId: number) => {
+    return await client.select().from(cardSubcategories)
+      .where(and(eq(cardSubcategories.cardId, cardId), eq(cardSubcategories.subcategoryId, subcategoryId)))
+      .limit(1).then(a => a?.[0]);
+  })
+
+  static removeCardSubcategory = maybeTransaction('removeCardSubcategory', async (client, cardId: number, subcategoryId: number) => {
+    await client.delete(cardSubcategories)
+      .where(and(eq(cardSubcategories.cardId, cardId), eq(cardSubcategories.subcategoryId, subcategoryId), eq(cardSubcategories.isMain, false)));
+  })
+
   static deleteCard = maybeTransaction('deleteCard', async (client, cardId: number) => {
     await client.delete(cardSubcategories).where(eq(cardSubcategories.cardId, cardId));
     await client.delete(cards).where(eq(cards.id, cardId));

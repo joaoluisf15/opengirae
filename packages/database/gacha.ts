@@ -222,6 +222,15 @@ export class GachaLogic {
     for (const r of results) countByCard.set(r.card.id, (countByCard.get(r.card.id) ?? 0) + 1);
     const drawnCardIds = [...countByCard.keys()];
 
+    // real main subcategory for display
+    const mainSubcategoryRows = await client
+      .select({ cardId: cardSubcategories.cardId, name: subcategories.name })
+      .from(cardSubcategories)
+      .innerJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
+      .where(and(inArray(cardSubcategories.cardId, drawnCardIds), eq(cardSubcategories.isMain, true)));
+    const mainSubcategoryNameByCard = new Map(mainSubcategoryRows.map(r => [r.cardId, r.name]));
+    for (const r of results) r.subcategoryName = mainSubcategoryNameByCard.get(r.card.id) ?? r.subcategoryName;
+
     // bulk pre-update counts, since the upsert below only returns post-update state.
     const existingCounts = await client
       .select({ cardId: userCards.cardId, count: userCards.count })

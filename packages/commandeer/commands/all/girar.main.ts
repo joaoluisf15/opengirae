@@ -154,10 +154,13 @@ export default class GirarCommand extends Command {
       // TODO: could these be a single function call inside a transaction for better performance and stability?
       const userCard = await CardsDB.addUserCard(user.id, drawnCard.id);
       await CardsDB.addCardDrawHistory(user.id, drawnCard.id, categoryId, subcategoryId);
-      const tags = await CardsDB.getSecondarySubcategoryNames(drawnCard.id);
+      // real card identity, not the pool it was drawn from
+      const [cardDetails, tags] = await Promise.all([
+        CardsDB.getCardWithDetails(drawnCard.id),
+        CardsDB.getSecondarySubcategoryNames(drawnCard.id),
+      ]);
 
-      const subcategory = allSubcategories.find(s => s.id === subcategoryId);
-      const subcategoryName = subcategory?.name ?? 'Desconhecida';
+      const subcategoryName = cardDetails?.subcategoryName ?? 'Desconhecida';
       const count = userCard?.count ?? 1;
       const subcategoryNames = [subcategoryName, ...tags].map(escapeMarkdown).join(' / ');
 
