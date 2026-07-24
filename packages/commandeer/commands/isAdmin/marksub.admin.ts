@@ -25,8 +25,17 @@ export default class MarkSubcategoryCommand extends Command {
   static override async execute(ctx: IncomingCommand, args: { card: NonNullable<Awaited<ReturnType<typeof CardsDB.getCardWithDetails>>>; subcategory: NonNullable<Awaited<ReturnType<typeof CardsDB.getSubcategory>>> }) {
     const { card, subcategory } = args
 
+    const existing = await CardsDB.getCardSubcategoryEntry(card.id, subcategory.id)
+    if (existing?.isMain) {
+      await reply(ctx, `😅 **${escapeMarkdown(subcategory.name)}** já é a subcategoria principal de **${escapeMarkdown(card.name)}** — não dá pra remover ela por aqui.`)
+      return
+    }
+    const removing = !!existing
+
     await reply(ctx, {
-      content: `Deseja colocar **${escapeMarkdown(card.name)}** na subcategoria **${escapeMarkdown(subcategory.name)}**?`,
+      content: removing
+        ? `Deseja remover **${escapeMarkdown(card.name)}** da subcategoria **${escapeMarkdown(subcategory.name)}**?`
+        : `Deseja colocar **${escapeMarkdown(card.name)}** na subcategoria **${escapeMarkdown(subcategory.name)}**?`,
       eventName: CONFIRM_EVENT,
       restricted: 'author',
       options: [{ title: '✅ Confirmar', data: true }, { title: '❌ Cancelar', data: false }],
@@ -38,6 +47,13 @@ export default class MarkSubcategoryCommand extends Command {
 
     const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
     if (!user) return
+
+    if (removing) {
+      await CardsDB.removeCardSubcategory(card.id, subcategory.id)
+      await AuditDB.log(user.id, 'card.subcategoryRemove', { cardId: card.id, name: card.name, subcategoryId: subcategory.id, subcategoryName: subcategory.name })
+      await reply(ctx, `🃏 **${escapeMarkdown(card.name)}** não pertence mais à subcategoria **${escapeMarkdown(subcategory.name)}**.`)
+      return
+    }
 
     await CardsDB.addCardSubcategory(card.id, subcategory.id)
     await AuditDB.log(user.id, 'card.subcategoryAdd', { cardId: card.id, name: card.name, subcategoryId: subcategory.id, subcategoryName: subcategory.name })
