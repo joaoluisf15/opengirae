@@ -98,6 +98,10 @@ cause; don't leave speculative logging behind "just in case."
   and when building the normalized `Message.chat.threadId` the rest of the
   bot relies on.
 
+- **`answerer`'s error classification lives in `packages/answerer/error.ts`** (`isPermanentSendError`, `extractRetryAfter`), not inline in `index.ts` — kept separate so it's unit-testable without booting the real BullMQ `Worker`/health server that `index.ts` starts on import. Two gotchas found via a production investigation into jobs burning all 3 retry attempts before failing:
+  - Telegram doesn't consistently use HTTP 403 for permanent send failures — "bot was kicked from the supergroup", "not enough rights to send X", "bot was blocked by the user" sometimes arrive as plain 400s instead of 403, so `isPermanentSendError` matches on message text too, not just `err.code === 403`. Same message-matching also covers "message is not modified" (a harmless edit no-op, not really a failure) and "message to be replied/edit not found" (the target message is gone) — both permanent, neither worth 3 retries.
+  - `editMessageMedia`'s flood-control error doesn't always set `parameters.retry_after`, even though the retry delay is still present in the message text ("Too Many Requests: retry after N") — `extractRetryAfter` falls back to parsing it. Without this, `answerer` retried on BullMQ's default ~3s backoff instead of Telegram's actual (much longer) cooldown, guaranteeing the retry hit the same rate limit and the message never sent.
+
 ## Test-suite pollution: stale rows from a crashed run
 
 Since tests run against a real local Postgres (see `01-setup.md`,
