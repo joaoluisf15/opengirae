@@ -206,7 +206,7 @@
 			return;
 		}
 
-		if (editId === null) return;
+		if (editId === null || categoryId === null) return;
 		const tagList = tags
 			.split(',')
 			.map((t) => t.trim())
@@ -215,15 +215,27 @@
 			await trpc().categories.updateSubcategory.mutate({
 				id: editId,
 				name,
+				categoryId,
 				tags: tagList,
 				isSecondary,
 				imageUrl: imageUrl || undefined,
 				emoji: emoji || undefined,
 				rarityModifier
 			});
+			const category = data.categories.find((c) => c.id === categoryId);
 			const rowNode = gridApi?.getRowNode(String(editId));
 			if (rowNode?.data)
-				rowNode.setData({ ...rowNode.data, name, tags: tagList, isSecondary, imageUrl: imageUrl || null, emoji: emoji || null, rarityModifier });
+				rowNode.setData({
+					...rowNode.data,
+					name,
+					categoryId,
+					categoryName: category?.name ?? rowNode.data.categoryName,
+					tags: tagList,
+					isSecondary,
+					imageUrl: imageUrl || null,
+					emoji: emoji || null,
+					rarityModifier
+				});
 			toast.success('Subcategoria atualizada');
 		} catch {
 			toast.error('Falha ao atualizar subcategoria');
@@ -301,16 +313,15 @@
 			Nome
 			<input bind:value={name} class="field mt-1" required />
 		</label>
-		{#if dialogMode === 'create'}
-			<label class="text-ink-dim text-xs">
-				Categoria
-				<select bind:value={categoryId} class="field mt-1">
-					{#each data.categories as category (category.id)}
-						<option value={category.id}>{category.emoji} {category.name}</option>
-					{/each}
-				</select>
-			</label>
-		{:else}
+		<label class="text-ink-dim text-xs">
+			Categoria
+			<select bind:value={categoryId} class="field mt-1">
+				{#each data.categories as category (category.id)}
+					<option value={category.id}>{category.emoji} {category.name}</option>
+				{/each}
+			</select>
+		</label>
+		{#if dialogMode === 'edit'}
 			<label class="text-ink-dim text-xs">
 				Tags (separadas por vírgula)
 				<input bind:value={tags} class="field mt-1" />
