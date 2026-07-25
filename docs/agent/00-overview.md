@@ -78,6 +78,13 @@ bug class here. Concretely, in this codebase:
   must differ) still needs an explicit check in the command body even when
   each argument individually resolved fine — `@CommandArgument` guards only
   ever see their own value, never a sibling's.
+- **`luckModifier` actually affects card-rarity odds** (`GachaLogic.selectCard`,
+  `packages/database/gacha.ts`) — it used to only influence which *subcategory*
+  got rolled, silently doing nothing at the card-rarity level. Any future
+  admin/staff feature that wants to suppress a player's draw odds (like
+  `/hipoteca`) should go through `luckModifier`, not invent a second
+  mechanism — and remember `selectCard` returns `undefined`, not a
+  deterministic fallback pick, when every card in a pool gets weighted to 0.
 
 **The general rule**: if an action needs to be "check something, then act on
 it," push the check into the same atomic operation as the act (a
