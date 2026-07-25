@@ -59,7 +59,7 @@ cause; don't leave speculative logging behind "just in case."
   which one it was.
 - **`isAnimatedPhoto` (GIF) vs `isVideo`** — a GIF is not a video, but
   `/upload`'s cativeiro submissions deliberately bucket it as one anyway
-  (`isVideoLike()` in `packages/commandeer/services/cativeiro.ts` — used for
+  (`isVideoLike()` in `packages/commandeer/services/cards/cativeiro.ts` — used for
   the stored `mediaType`, the review hashtag/emoji, and which `reply()`
   method gets forced). This is intentional, not a shortcut to "fix later":
   distinguishing a GIF from a photo any more precisely than that isn't

@@ -1,6 +1,6 @@
 import { join } from "path"
 import { error } from "@girae/common/logger"
-import type { HookEventMap, HookEventName } from "@girae/common/hooks/types"
+import type { HookEventMap, HookEventName, CompletedSubcategory } from "@girae/common/hooks/types"
 import type { Platform } from "@girae/common/commands/types"
 import { Loadable } from "./base"
 
@@ -42,9 +42,9 @@ export const emitHook = hooksLoader.emit.bind(hooksLoader)
 // emits one 'cards:new' event per distinct card gained in a single draw/trade.
 export async function emitCardsNew(
   userId: number, telegramId: string, displayName: string, platform: Platform,
-  crossings: Array<{ cardId: number; previousCount: number; newCount: number }>,
+  crossings: Array<{ cardId: number; previousCount: number; newCount: number; completedSubcategories?: CompletedSubcategory[] }>,
 ): Promise<void> {
   for (const c of crossings) {
-    await emitHook('cards:new', { userId, cardId: c.cardId, previousCount: c.previousCount, newCount: c.newCount, telegramId, displayName, platform })
+    await emitHook('cards:new', { userId, cardId: c.cardId, previousCount: c.previousCount, newCount: c.newCount, telegramId, displayName, platform, completedSubcategories: c.completedSubcategories })
   }
 }

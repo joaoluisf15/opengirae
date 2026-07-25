@@ -1,6 +1,7 @@
 import { Command, Subcommand, Page } from '@girae/common/commands'
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
+import { EconomyDB } from '@girae/database/economy'
 import { GachaLogic } from '@girae/database/gacha'
 import { DBOS } from '@dbos-inc/dbos-sdk'
 import { reply, buildInteractiveButtons, pageNavRow } from '@girae/common/dbos/messaging'
@@ -152,7 +153,8 @@ export default class GirarCommand extends Command {
       }
 
       // TODO: could these be a single function call inside a transaction for better performance and stability?
-      const userCard = await CardsDB.addUserCard(user.id, drawnCard.id);
+      const incomeInflationRate = await EconomyDB.getIncomeInflationRate();
+      const userCard = await CardsDB.addUserCard(user.id, drawnCard.id, incomeInflationRate);
       await CardsDB.addCardDrawHistory(user.id, drawnCard.id, categoryId, subcategoryId);
       // real card identity, not the pool it was drawn from
       const [cardDetails, tags] = await Promise.all([
@@ -163,13 +165,15 @@ export default class GirarCommand extends Command {
       const subcategoryName = cardDetails?.subcategoryName ?? 'Desconhecida';
       const count = userCard?.count ?? 1;
       const subcategoryNames = [subcategoryName, ...tags].map(escapeMarkdown).join(' / ');
+      const completionLines = (userCard?.completedSubcategories ?? [])
+        .map(c => `🎉 Você completou a coleção **${escapeMarkdown(c.subcategoryName)}**!`).join('\n');
 
       const text = `🎰 Parabéns, você ganhou e vai levar:
 
 ${drawnCard.rarityEmoji} \`${drawnCard.id}\`. **${escapeMarkdown(drawnCard.name)}**
 ${category.emoji} _${subcategoryNames}_
 
-👾 \`${user.id}\`. ${mention(ctx.message.platform, ctx.message.author.id, ctx.message.author.name)} (\`${count}x\`)`;
+👾 \`${user.id}\`. ${mention(ctx.message.platform, ctx.message.author.id, ctx.message.author.name)} (\`${count}x\`)${completionLines ? `\n\n${completionLines}` : ''}`;
 
       await reply(ctx, {
         content: text,
@@ -178,7 +182,7 @@ ${category.emoji} _${subcategoryNames}_
       });
 
       await emitCardsNew(user.id, authorId, ctx.message.author.name, ctx.message.platform, [
-        { cardId: drawnCard.id, previousCount: userCard?.previousCount ?? 0, newCount: userCard?.count ?? 1 },
+        { cardId: drawnCard.id, previousCount: userCard?.previousCount ?? 0, newCount: userCard?.count ?? 1, completedSubcategories: userCard?.completedSubcategories },
       ]);
     } finally {
       await releaseGirar(authorId, chatId);
@@ -212,7 +216,8 @@ ${category.emoji} _${subcategoryNames}_
       }
 
       const categoryOrder = Array.from({ length: drawCount }, () => categories[Math.floor(Math.random() * categories.length)]!.id);
-      const { draws, countsByCard } = await GachaLogic.runBulkDraws(user.id, categoryOrder, user.luckModifier);
+      const incomeInflationRate = await EconomyDB.getIncomeInflationRate();
+      const { draws, countsByCard } = await GachaLogic.runBulkDraws(user.id, categoryOrder, user.luckModifier, incomeInflationRate);
       const summary = await buildBulkDrawSummary(draws, { splitFavorites: false });
 
       if (draws.length === 0) {
@@ -223,10 +228,13 @@ ${category.emoji} _${subcategoryNames}_
       const runId = ctx.workflowIDToBeAssigned;
       await cacheBulkDrawSummary(runId, summary);
 
+      const completionLines = countsByCard.flatMap(c => c.completedSubcategories ?? [])
+        .map(c => `🎉 Você completou a coleção **${escapeMarkdown(c.subcategoryName)}**!`).join('\n');
+
       const firstPage = renderBulkDrawSummaryPage(summary, 0);
       const navRow = pageNavRow('girarall', runId, 0, firstPage.hasNext, firstPage.totalPages);
       await reply(ctx, {
-        content: firstPage.content,
+        content: completionLines ? `${firstPage.content}\n\n${completionLines}` : firstPage.content,
         photoUrl: firstPage.photoUrl,
         buttonRows: navRow.length ? [navRow] : undefined,
       });

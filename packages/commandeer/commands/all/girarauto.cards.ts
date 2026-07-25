@@ -2,8 +2,10 @@ import { Command, Page } from '@girae/common/commands'
 import { reply, pageNavRow } from '@girae/common/dbos/messaging'
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
+import { EconomyDB } from '@girae/database/economy'
 import { GachaLogic } from '@girae/database/gacha'
 import type { IncomingCommand } from '@girae/common/commands/types'
+import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { addHours, formatDistanceToNow, startOfHour } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { claimGirar, releaseGirar } from '../../services/gacha/girarClaim'
@@ -92,7 +94,8 @@ export default class GirarAutoCommand extends Command {
     }
 
     try {
-      const { draws, countsByCard } = await GachaLogic.runBulkDraws(user.id, categoryOrder, user.luckModifier, favoriteSubcategoryIds);
+      const incomeInflationRate = await EconomyDB.getIncomeInflationRate();
+      const { draws, countsByCard } = await GachaLogic.runBulkDraws(user.id, categoryOrder, user.luckModifier, incomeInflationRate, favoriteSubcategoryIds);
       const summary = await buildBulkDrawSummary(draws, { splitFavorites: true });
 
       if (draws.length === 0) {
@@ -103,10 +106,13 @@ export default class GirarAutoCommand extends Command {
       const runId = ctx.workflowIDToBeAssigned;
       await cacheBulkDrawSummary(runId, summary);
 
+      const completionLines = countsByCard.flatMap(c => c.completedSubcategories ?? [])
+        .map(c => `🎉 Você completou a coleção **${escapeMarkdown(c.subcategoryName)}**!`).join('\n');
+
       const firstPage = renderBulkDrawSummaryPage(summary, 0);
       const navRow = pageNavRow('girarauto', runId, 0, firstPage.hasNext, firstPage.totalPages);
       await reply(ctx, {
-        content: firstPage.content,
+        content: completionLines ? `${firstPage.content}\n\n${completionLines}` : firstPage.content,
         photoUrl: firstPage.photoUrl,
         buttonRows: navRow.length ? [navRow] : undefined,
       });

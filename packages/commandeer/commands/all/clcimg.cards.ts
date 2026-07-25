@@ -7,6 +7,8 @@ import { buildFilterArg, filterAdviceText, filterButtonsRow } from '@girae/commo
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { FILTERS, loadSubcategoryCollection } from '../../services/cards/subcategoryCollection'
 import { FALLBACK_IMAGE } from './card.cards'
+import { UsersDB } from '@girae/database/users'
+import { attemptSubcategoryCompletionReward } from '../../services/cards/collectionCompletion'
 
 async function renderPage(rawArg: string, page: number, viewerTelegramId: string, platform: 'telegram' | 'discord') {
   const loaded = await loadSubcategoryCollection(rawArg, viewerTelegramId, platform)
@@ -66,6 +68,12 @@ export default class CollectionImageCommand extends Command {
         ...(navRow.length ? [navRow] : []),
       ],
     })
+
+    // backfill for a subcategory completed before this feature shipped - idempotent, safe on every view.
+    const viewer = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
+    if (viewer) {
+      await attemptSubcategoryCompletionReward(viewer.id, args.subcategory.id, ctx.message.author.id, ctx.message.author.name, ctx.message.platform as 'telegram' | 'discord')
+    }
   }
 
   @Page({ name: 'clcimg', restricted: true })

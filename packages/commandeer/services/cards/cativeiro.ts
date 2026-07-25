@@ -38,7 +38,7 @@ export function containsRarityEmoji(str: string): boolean {
 }
 
 export function validateCustomEmoji(value: string): boolean | string {
-  if (!isEmojiOnly(value)) return 'Manda um emoji de verdade pra mim personalizar seu card! 🥺'
-  if (containsRarityEmoji(value)) return 'Esse emoji já é usado pela bot para mostrar a raridade das cartas. Escolha outro! 😅'
+  if (!isEmojiOnly(value)) return '🥺 Manda um emoji de verdade pra mim personalizar seu card!'
+  if (containsRarityEmoji(value)) return '😅 Esse emoji já é usado pela bot para mostrar a raridade das cartas. Escolha outro!'
   return true
 }

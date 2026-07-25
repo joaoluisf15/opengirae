@@ -9,3 +9,6 @@ export const CARD_DISCARD_REWARDS: Record<string, number> = {
   Raro: 250,
   Lendário: 500,
 };
+
+// bonus over what the same cards would earn discarded individually - rewards finishing the set.
+export const SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER = 1.5;

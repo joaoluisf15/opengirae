@@ -141,6 +141,13 @@
       "when": 1784874730698,
       "tag": "0019_powerful_randall_flagg",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784936034237,
+      "tag": "0020_left_prowler",
+      "breakpoints": true
     }
   ]
 }
