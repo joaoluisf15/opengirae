@@ -66,9 +66,10 @@ bug class here. Concretely, in this codebase:
   wrapped in a try/catch for the constraint-violation error code (Postgres
   `23505`) — see the purchase flow (`bought_items`' `unique(userId, itemId)`)
   and the store-item duplicate-name fix (`store_items`' `unique(title,
-  type)`, added after finding the exact gap this section warns about). The
-  constraint is the actual safety net; the pre-check (if you keep one at all)
-  is just a nicer error message for the common case.
+  type)`, added after finding the exact gap this section warns about), and
+  `/hipoteca`'s hold flag (`hipoteca_sessions`' unique index on `userId`).
+  The constraint is the actual safety net; the pre-check (if you keep one at
+  all) is just a nicer error message for the common case.
 - **Claim/lock-before-acting flows** (two people clicking `/girar` for the
   same user at once, two trade actions racing): use an atomic
   Redis `SET ... NX` claim (see `girarClaim.ts`/`tradeLock.ts`), not a

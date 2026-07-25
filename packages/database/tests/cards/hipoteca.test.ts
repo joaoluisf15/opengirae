@@ -3,7 +3,7 @@ import { TestFixtures } from "@girae/tests";
 import { db } from "../../index";
 import { users } from "../../schemas/users";
 import { userCards, hipotecaSessions, hipotecaHoldings, rarities } from "../../schemas/cards";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { CardsDB } from "../../cards";
 
 describe("CardsDB hipoteca methods", () => {
@@ -16,8 +16,7 @@ describe("CardsDB hipoteca methods", () => {
     userId = (await fx.user({ displayName: "Test Hipoteca Target" })).id;
     staffId = (await fx.user({ displayName: "Test Hipoteca Staff" })).id;
 
-    // "Lendário" is real catalog data already seeded in the shared dev DB, not something
-    // this test creates - reuse it (and never register it for cleanup deletion).
+    // "Lendário" is real catalog data already seeded in the shared dev DB - reuse it, never register it for cleanup deletion.
     legendaryRarityId = await db.select({ id: rarities.id }).from(rarities).where(eq(rarities.name, "Lendário")).then(r => r[0]!.id);
     commonRarityId = (await fx.rarity({ name: `Test Hipoteca Common ${Date.now()}`, weight: 1000 })).id;
 
@@ -93,6 +92,9 @@ describe("CardsDB hipoteca methods", () => {
   });
 
   test("liftHipoteca merges into an existing count if the user re-acquired a held card during the hold", async () => {
+    // held card has real customization set before the hold - must survive the merge, never get clobbered
+    await db.update(userCards).set({ customEmoji: '🎨' }).where(and(eq(userCards.userId, userId), eq(userCards.cardId, legendaryCardAId)));
+
     await CardsDB.applyHipoteca(userId, staffId);
     const session = await CardsDB.getActiveHipotecaSession(userId);
 
@@ -102,6 +104,7 @@ describe("CardsDB hipoteca methods", () => {
     await CardsDB.liftHipoteca(session!.id);
     const restoredA = await db.select().from(userCards).where(eq(userCards.cardId, legendaryCardAId)).then(r => r[0]);
     expect(restoredA?.count).toBe(3 + 1); // held 3 + the 1 re-acquired during the hold
+    expect(restoredA?.customEmoji).toBe('🎨');
   });
 
   test("applyHipoteca on a user with no legendary cards returns nothing_to_hold", async () => {

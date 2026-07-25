@@ -33,8 +33,7 @@ describe("/hipoteca toggles a hold on a user's legendary cards", () => {
     legendaryCardId = (await fx.card({ name: "Test Hipoteca Cmd Legendary", rarityId: legendaryRarityId, subcategoryId })).id;
     await fx.ownCard(targetId, legendaryCardId, 2);
 
-    // apply/liftHipoteca write AuditDB.log(staffId, ...) rows - must clear those before the
-    // staff fixture's own cleanup deletes the user, or the FK on audit_logs blocks it.
+    // apply/liftHipoteca write AuditDB.log rows - must clear those before staff cleanup deletes the user, or the FK blocks it.
     fx.onCleanup(async () => { await db.delete(auditLogs).where(eq(auditLogs.actorUserId, staffId)); });
   });
 

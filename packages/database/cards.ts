@@ -28,6 +28,9 @@ export interface CativeiroSubmitter {
   threadId?: string;
 }
 
+// the rarity /hipoteca holds - shared by the command layer's getUserCardsByRarityName call and this file's own filter
+export const HIPOTECA_RARITY_NAME = 'Lendário';
+
 export class InsufficientCardError extends Error {
   constructor(public userId: number, public cardId: number) {
     super(`user ${userId} does not have enough copies of card ${cardId}`);
@@ -271,7 +274,8 @@ export class CardsDB {
       .from(userCards)
       .innerJoin(cards, eq(cards.id, userCards.cardId))
       .innerJoin(rarities, eq(rarities.id, cards.rarityId))
-      .where(and(eq(userCards.userId, userId), eq(rarities.name, rarityName), gt(userCards.count, 0)));
+      .where(and(eq(userCards.userId, userId), eq(rarities.name, rarityName), gt(userCards.count, 0)))
+      .orderBy(cards.name);
   })
 
   static getActiveHipotecaSession = maybeTransaction('getActiveHipotecaSession', async (client, userId: number) => {
@@ -300,29 +304,20 @@ export class CardsDB {
   }
 
   private static applyHipotecaTx = maybeTransaction('applyHipoteca', async (client, userId: number, staffId: number) => {
-    // pre-check for the common case: once a hold is active its cards are already out of
-    // user_cards, so heldRows below would be empty and misreport nothing_to_hold. The unique
-    // index on hipotecaSessions.userId (caught as 23505 by the public wrapper) is still the
-    // real TOCTOU-safe guard against two concurrent applies; this is just the nicer message.
+    // pre-check for the nicer error: an active hold already emptied user_cards, so the DELETE below would
+    // misreport nothing_to_hold. Real TOCTOU-safe guard is the unique index on userId, caught as 23505 above.
     const existingSession = await client.select({ id: hipotecaSessions.id }).from(hipotecaSessions).where(eq(hipotecaSessions.userId, userId)).limit(1).then(a => a?.[0]);
     if (existingSession) return { ok: false as const, reason: 'already_active' as const };
 
-    const heldRows = await client
-      .select({
-        cardId: userCards.cardId,
-        name: cards.name,
-        count: userCards.count,
-        tradable: userCards.tradable,
-        customEmoji: userCards.customEmoji,
-        customMediaUrl: userCards.customMediaUrl,
-        customMediaType: userCards.customMediaType,
-      })
+    const heldIdRows = await client
+      .select({ cardId: userCards.cardId, name: cards.name })
       .from(userCards)
       .innerJoin(cards, eq(cards.id, userCards.cardId))
       .innerJoin(rarities, eq(rarities.id, cards.rarityId))
-      .where(and(eq(userCards.userId, userId), eq(rarities.name, 'Lendário'), gt(userCards.count, 0)));
+      .where(and(eq(userCards.userId, userId), eq(rarities.name, HIPOTECA_RARITY_NAME), gt(userCards.count, 0)));
 
-    if (heldRows.length === 0) return { ok: false as const, reason: 'nothing_to_hold' as const };
+    if (heldIdRows.length === 0) return { ok: false as const, reason: 'nothing_to_hold' as const };
+    const nameByCardId = new Map(heldIdRows.map(r => [r.cardId, r.name]));
 
     const currentUser = await client.select({ luckModifier: users.luckModifier }).from(users).where(eq(users.id, userId)).limit(1).then(a => a?.[0]);
     if (!currentUser) return { ok: false as const, reason: 'nothing_to_hold' as const };
@@ -333,8 +328,16 @@ export class CardsDB {
       .then(a => a?.[0]);
     if (!session) return { ok: false as const, reason: 'nothing_to_hold' as const };
 
+    // DELETE...RETURNING instead of an earlier SELECT: what's actually removed is what gets held, so a
+    // concurrent draw/trade/gift between the selects above and this delete can't vanish extra copies.
+    const deletedRows = await client.delete(userCards)
+      .where(and(eq(userCards.userId, userId), inArray(userCards.cardId, [...nameByCardId.keys()])))
+      .returning();
+
+    if (deletedRows.length === 0) return { ok: false as const, reason: 'nothing_to_hold' as const };
+
     await client.insert(hipotecaHoldings).values(
-      heldRows.map(r => ({
+      deletedRows.map(r => ({
         sessionId: session.id,
         cardId: r.cardId,
         count: r.count,
@@ -344,14 +347,18 @@ export class CardsDB {
         customMediaType: r.customMediaType,
       }))
     );
-    await client.delete(userCards).where(and(eq(userCards.userId, userId), inArray(userCards.cardId, heldRows.map(r => r.cardId))));
     await client.update(users).set({ luckModifier: 0 }).where(eq(users.id, userId));
 
-    return { ok: true as const, sessionId: session.id, cards: heldRows.map(r => ({ cardId: r.cardId, name: r.name, count: r.count })) };
+    return {
+      ok: true as const,
+      sessionId: session.id,
+      cards: deletedRows.map(r => ({ cardId: r.cardId, name: nameByCardId.get(r.cardId)!, count: r.count })),
+    };
   })
 
   static liftHipoteca = maybeTransaction('liftHipoteca', async (client, sessionId: number) => {
-    const session = await client.select().from(hipotecaSessions).where(eq(hipotecaSessions.id, sessionId)).limit(1).then(a => a?.[0]);
+    // FOR UPDATE so two concurrent lifts of the same session block/miss instead of both granting the cards
+    const session = await client.select().from(hipotecaSessions).where(eq(hipotecaSessions.id, sessionId)).for('update').limit(1).then(a => a?.[0]);
     if (!session) return null;
 
     const holdings = await client
@@ -368,9 +375,9 @@ export class CardsDB {
       .innerJoin(cards, eq(cards.id, hipotecaHoldings.cardId))
       .where(eq(hipotecaHoldings.sessionId, sessionId));
 
-    for (const h of holdings) {
+    if (holdings.length > 0) {
       await client.insert(userCards)
-        .values({
+        .values(holdings.map(h => ({
           userId: session.userId,
           cardId: h.cardId,
           count: h.count,
@@ -378,11 +385,16 @@ export class CardsDB {
           customEmoji: h.customEmoji,
           customMediaUrl: h.customMediaUrl,
           customMediaType: h.customMediaType,
-        })
+        })))
         .onConflictDoUpdate({
           target: [userCards.userId, userCards.cardId],
-          // only merges count - never clobbers tradable/custom* the user set through their own row
-          set: { count: sql`${userCards.count} + excluded.${sql.identifier(userCards.count.name)}` },
+          // merges count, and only fills custom* in if the existing row doesn't already have them - never clobbers a real value
+          set: {
+            count: sql`${userCards.count} + excluded.${sql.identifier(userCards.count.name)}`,
+            customEmoji: sql`coalesce(${userCards.customEmoji}, excluded.${sql.identifier(userCards.customEmoji.name)})`,
+            customMediaUrl: sql`coalesce(${userCards.customMediaUrl}, excluded.${sql.identifier(userCards.customMediaUrl.name)})`,
+            customMediaType: sql`coalesce(${userCards.customMediaType}, excluded.${sql.identifier(userCards.customMediaType.name)})`,
+          },
         });
     }
 

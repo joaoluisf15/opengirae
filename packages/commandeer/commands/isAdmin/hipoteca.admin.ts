@@ -1,6 +1,6 @@
 import { Command, CommandArgument, CommandArgumentType } from '@girae/common/commands'
 import { DBOS } from '@dbos-inc/dbos-sdk'
-import { CardsDB } from '@girae/database/cards'
+import { CardsDB, HIPOTECA_RARITY_NAME } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
 import { AuditDB } from '@girae/database/audit'
 import { reply, deleteMsg } from '@girae/common/dbos/messaging'
@@ -9,8 +9,15 @@ import type { IncomingCommand } from '@girae/common/commands/types'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 
 const CONFIRM_EVENT = 'hipoteca:confirm'
+const CONFIRM_LIST_LIMIT = 20
 
 type Target = { id: number; displayName: string }
+
+// caps a rendered card list so the confirm message can't blow past Telegram's ~4096 char limit
+function renderCardList(lines: string[]): string {
+  if (lines.length <= CONFIRM_LIST_LIMIT) return lines.join('\n');
+  return `${lines.slice(0, CONFIRM_LIST_LIMIT).join('\n')}\n…e mais ${lines.length - CONFIRM_LIST_LIMIT}`;
+}
 
 export default class HipotecaCommand extends Command {
   static override info = {
@@ -42,13 +49,13 @@ export default class HipotecaCommand extends Command {
   }
 
   static async confirmAndApply(ctx: IncomingCommand, staffId: number, target: Target, targetPlatformId: string) {
-    const owned = await CardsDB.getUserCardsByRarityName(target.id, 'Lendário')
+    const owned = await CardsDB.getUserCardsByRarityName(target.id, HIPOTECA_RARITY_NAME)
     if (owned.length === 0) {
       await reply(ctx, `😅 **${escapeMarkdown(target.displayName)}** não tem nenhum card lendário para hipotecar.`)
       return
     }
 
-    const list = owned.map(c => `🥇 \`${c.cardId}\`. ${escapeMarkdown(c.name)} (\`${c.count}x\`)`).join('\n')
+    const list = renderCardList(owned.map(c => `${c.rarityEmoji} \`${c.cardId}\`. ${escapeMarkdown(c.name)} (\`${c.count}x\`)`))
     await reply(ctx, {
       content: `🔒 Hipotecar **${owned.length}** card(s) lendário(s) de **${escapeMarkdown(target.displayName)}**?\n\n${list}`,
       eventName: CONFIRM_EVENT,
@@ -81,7 +88,7 @@ export default class HipotecaCommand extends Command {
     targetPlatformId: string,
     session: NonNullable<Awaited<ReturnType<typeof CardsDB.getActiveHipotecaSession>>>,
   ) {
-    const list = session.holdings.map(c => `🥇 \`${c.cardId}\`. ${escapeMarkdown(c.name)} (\`${c.count}x\`)`).join('\n')
+    const list = renderCardList(session.holdings.map(c => `${c.rarityEmoji} \`${c.cardId}\`. ${escapeMarkdown(c.name)} (\`${c.count}x\`)`))
     await reply(ctx, {
       content: `🔓 Devolver **${session.holdings.length}** card(s) lendário(s) para **${escapeMarkdown(target.displayName)}**?\n\n${list}`,
       eventName: CONFIRM_EVENT,
