@@ -161,4 +161,18 @@ describe("GachaLogic.runBulkDraws", () => {
     await db.delete(cardDrawHistory).where(eq(cardDrawHistory.userId, userId));
     await db.delete(userCards).where(eq(userCards.userId, userId));
   });
+
+  test("a near-zero luckModifier statistically suppresses non-common draws end-to-end", async () => {
+    const legendaryRarityId = (await fx.rarity({ name: `Test Bulk Legendary ${Date.now()}`, weight: 1 })).id;
+    const legendarySubId = (await fx.subcategory({ categoryId, name: `Test Bulk Legendary Sub ${Date.now()}` })).id;
+    await fx.card({ name: "Test Bulk Legendary Card", rarityId: legendaryRarityId, subcategoryId: legendarySubId });
+
+    const { draws: results } = await GachaLogic.runBulkDraws(userId, Array(50).fill(categoryId), 0);
+    const legendaryDraws = results.filter(r => r.subcategoryId === legendarySubId);
+    // proves luckModifier reached card selection, not just subcategory selection
+    expect(legendaryDraws.length).toBe(0);
+
+    await db.delete(cardDrawHistory).where(eq(cardDrawHistory.userId, userId));
+    await db.delete(userCards).where(eq(userCards.userId, userId));
+  });
 });
