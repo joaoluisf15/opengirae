@@ -40,6 +40,21 @@ describe("/cativeiros", () => {
       expect(page?.content).not.toContain('/emojicard');
     });
 
+    test("singular wording with exactly one eligible card", async () => {
+      const page = await renderPage(String(viewerId), 0);
+      expect(page?.content).toContain('👑 `1` cativeiro ativo.');
+      expect(page?.content).not.toContain('cativeiros ativos');
+    });
+
+    test("plural wording once a second card becomes eligible", async () => {
+      const secondRarityId = (await fx.rarity({ name: "Test Cativeiros Rarity 2", emoji: '🥈', cativeiroThreshold: 5 })).id;
+      const secondCardId = (await fx.card({ name: "Kero", rarityId: secondRarityId })).id;
+      await fx.ownCard(viewerId, secondCardId, 5);
+
+      const page = await renderPage(String(viewerId), 0);
+      expect(page?.content).toContain('👑 `2` cativeiros ativos.');
+    });
+
     test("shows the rarity emoji when no custom emoji is set", async () => {
       const page = await renderPage(String(viewerId), 0);
       expect(page?.content).toContain(`🥇 \`${cardId}\`. **Clow Reed** (\`5x\`)`);

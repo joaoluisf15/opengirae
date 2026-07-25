@@ -15,10 +15,12 @@ export interface FakeCtxOptions {
   workflowID?: string;
   photoUrl?: string;
   isVideo?: boolean;
+  isAnimatedPhoto?: boolean;
   fileSizeBytes?: number;
   /** Same media fields, but on the synthetic replyTo message instead of the message itself. */
   replyToPhotoUrl?: string;
   replyToIsVideo?: boolean;
+  replyToIsAnimatedPhoto?: boolean;
   replyToFileSizeBytes?: number;
 }
 
@@ -42,6 +44,7 @@ export function fakeCtx(opts: FakeCtxOptions): IncomingCommand {
     platform,
     photoUrl: opts.replyToPhotoUrl,
     isVideo: opts.replyToIsVideo,
+    isAnimatedPhoto: opts.replyToIsAnimatedPhoto,
     fileSizeBytes: opts.replyToFileSizeBytes,
   } : undefined;
 
@@ -59,6 +62,7 @@ export function fakeCtx(opts: FakeCtxOptions): IncomingCommand {
       replyTo,
       photoUrl: opts.photoUrl,
       isVideo: opts.isVideo,
+      isAnimatedPhoto: opts.isAnimatedPhoto,
       fileSizeBytes: opts.fileSizeBytes,
     },
   };

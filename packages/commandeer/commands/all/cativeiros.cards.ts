@@ -29,9 +29,10 @@ export async function renderPage(viewerUserIdArg: string, page: number) {
     return `${subEmoji}${rarityOrCustom} \`${c.id}\`. **${escapeMarkdown(c.name)}** (\`${c.ownedCount}x\`)`
   }).join('\n')
   const pageInfo = totalPages > 1 ? `\n\n📃 Página \`${page + 1}\` de **${totalPages}**` : ''
+  const cativeiroLabel = total === 1 ? 'cativeiro ativo' : 'cativeiros ativos'
 
   const content = `👤 \`${viewer.id}\`. Cativeiros de **${escapeMarkdown(viewer.displayName)}**
-👑 \`${total}\` cativeiros ativos.
+👑 \`${total}\` ${cativeiroLabel}.
 
 ${cardLines}
 

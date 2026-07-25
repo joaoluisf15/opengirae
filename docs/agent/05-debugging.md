@@ -57,6 +57,15 @@ cause; don't leave speculative logging behind "just in case."
   `image/`. See `resolveMedia()` in `telegram-inbound/index.ts` — all three
   feed the same `Message.photoUrl`, so command code never needs to care
   which one it was.
+- **`isAnimatedPhoto` (GIF) vs `isVideo`** — a GIF is not a video, but
+  `/upload`'s cativeiro submissions deliberately bucket it as one anyway
+  (`isVideoLike()` in `packages/commandeer/services/cards/cativeiro.ts` — used for
+  the stored `mediaType`, the review hashtag/emoji, and which `reply()`
+  method gets forced). This is intentional, not a shortcut to "fix later":
+  distinguishing a GIF from a photo any more precisely than that isn't
+  worth the complexity here, and visually a GIF has more in common with a
+  video than a static photo. Don't reintroduce a bare `isVideo` check for
+  cativeiro classification without also handling `isAnimatedPhoto`.
 - **Telegram never includes a profile photo URL on inbound updates** — a
   user's avatar is fetched separately (`tg.getUserProfilePhotos()`) and
   throttled to once per 24h per user (`avatarUpdatedAt`) by

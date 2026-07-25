@@ -69,7 +69,17 @@ bug class here. Concretely, in this codebase:
   type)`, added after finding the exact gap this section warns about), and
   `/hipoteca`'s hold flag (`hipoteca_sessions`' unique index on `userId`).
   The constraint is the actual safety net; the pre-check (if you keep one at
-  all) is just a nicer error message for the common case.
+  all) is just a nicer error message for the common case. When the insert
+  also needs to be conditional on a *second*, separately-racing fact (not
+  just "does a row already exist" but also "is some other live condition
+  still true right now") — `CardsDB.claimSubcategoryCompletionRewardWithClient`'s
+  one-time collection-completion payout is the example: a concurrent discard
+  could un-complete the collection between a separate check and the insert —
+  fold that condition into the same statement too, as
+  `INSERT ... SELECT ... WHERE NOT EXISTS (...)` rather than a bare
+  `INSERT ... ON CONFLICT`. See `UsersDB.mergeUsers` for the raw-SQL
+  `client.execute(sql\`...\`)` shape this needs (drizzle's insert builder
+  can't express a conditional `INSERT ... VALUES`).
 - **Claim/lock-before-acting flows** (two people clicking `/girar` for the
   same user at once, two trade actions racing): use an atomic
   Redis `SET ... NX` claim (see `girarClaim.ts`/`tradeLock.ts`), not a

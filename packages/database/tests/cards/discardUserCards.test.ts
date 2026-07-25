@@ -97,10 +97,11 @@ describe("CardsDB.discardUserCards", () => {
   });
 
   test("discarding below the rarity's cativeiro threshold clears customization", async () => {
-    const [{ rarityId, previousThreshold }] = await db
+    const [row] = await db
       .select({ rarityId: cards.rarityId, previousThreshold: rarities.cativeiroThreshold })
       .from(cards).innerJoin(rarities, eq(rarities.id, cards.rarityId))
       .where(eq(cards.id, ownedCardAId)).limit(1);
+    const { rarityId, previousThreshold } = row!;
     await db.update(rarities).set({ cativeiroThreshold: 5 }).where(eq(rarities.id, rarityId));
 
     try {

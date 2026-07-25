@@ -12,9 +12,15 @@ export async function cativeiroEligibilityGuard(card: CardDetails, ctx: Incoming
 
   const owned = await CardsDB.getUserCard(user.id, card.id)
   if (!owned || owned.count < card.cativeiroThreshold) {
-    return 'Esse card não está elegível para cativeiro ainda. Use /cativeiros para ver quais estão liberados. 😅'
+    return '😅 Esse card não está elegível para cativeiro ainda. Use /cativeiros para ver quais estão liberados.'
   }
   return true
+}
+
+// a GIF isn't a real video, but the bot can't reliably tell it apart from one either -
+// bucket it under "vídeo" rather than mislabeling it as a photo.
+export function isVideoLike(source: { isVideo?: boolean; isAnimatedPhoto?: boolean } | undefined): boolean {
+  return !!source?.isVideo || !!source?.isAnimatedPhoto
 }
 
 // ZWJ + variation selector-16 let multi-codepoint emoji (families, flags, skin tones) through too.
@@ -32,7 +38,7 @@ export function containsRarityEmoji(str: string): boolean {
 }
 
 export function validateCustomEmoji(value: string): boolean | string {
-  if (!isEmojiOnly(value)) return 'Manda um emoji de verdade pra mim personalizar seu card! 🥺'
-  if (containsRarityEmoji(value)) return 'Esse emoji já é usado pela bot para mostrar a raridade das cartas. Escolha outro! 😅'
+  if (!isEmojiOnly(value)) return '🥺 Manda um emoji de verdade pra mim personalizar seu card!'
+  if (containsRarityEmoji(value)) return '😅 Esse emoji já é usado pela bot para mostrar a raridade das cartas. Escolha outro!'
   return true
 }

@@ -35,12 +35,12 @@ describe("CardsDB.compareWishlists", () => {
 
   test("shows cards A has that B wants, and cards B has that A wants", async () => {
     // A owns cardWantedByBId (tradable), B wants it
-    await CardsDB.addUserCard(userAId, cardWantedByBId);
+    await CardsDB.addUserCard(userAId, cardWantedByBId, 1);
     await CardsDB.setCardTradable(userAId, cardWantedByBId, true);
     await CardsDB.addToWishlist(userBId, cardWantedByBId);
 
     // B owns cardWantedByAId (tradable), A wants it
-    await CardsDB.addUserCard(userBId, cardWantedByAId);
+    await CardsDB.addUserCard(userBId, cardWantedByAId, 1);
     await CardsDB.setCardTradable(userBId, cardWantedByAId, true);
     await CardsDB.addToWishlist(userAId, cardWantedByAId);
 
@@ -50,7 +50,7 @@ describe("CardsDB.compareWishlists", () => {
   });
 
   test("a non-tradable card never shows up even if wanted", async () => {
-    await CardsDB.addUserCard(userAId, cardNotTradableId); // tradable defaults to false
+    await CardsDB.addUserCard(userAId, cardNotTradableId, 1); // tradable defaults to false
     await CardsDB.addToWishlist(userBId, cardNotTradableId);
 
     const result = await CardsDB.compareWishlists(userAId, userBId);

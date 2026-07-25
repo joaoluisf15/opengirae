@@ -63,8 +63,8 @@ describe("CardsDB.executeTrade - concurrency", () => {
       ]);
 
       const results = await Promise.allSettled([
-        CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 1 }], userBId, [{ cardId: dummyForB.id, count: 1 }]),
-        CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 1 }], userCId, [{ cardId: dummyForC.id, count: 1 }]),
+        CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 1 }], userBId, [{ cardId: dummyForB.id, count: 1 }], 1),
+        CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 1 }], userCId, [{ cardId: dummyForC.id, count: 1 }], 1),
       ]);
 
       const fulfilled = results.filter(r => r.status === 'fulfilled');
@@ -111,7 +111,7 @@ describe("CardsDB.executeTrade - concurrency", () => {
 
       const results = await Promise.allSettled(
         partners.map((partnerId, i) =>
-          CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 1 }], partnerId, [{ cardId: dummyCardIds[i]!, count: 1 }])
+          CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 1 }], partnerId, [{ cardId: dummyCardIds[i]!, count: 1 }], 1)
         )
       );
 

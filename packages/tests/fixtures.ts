@@ -16,6 +16,7 @@ import { storeItems } from "@girae/database/schemas/vanities";
 import { eq, and } from "drizzle-orm";
 import { UsersDB } from "@girae/database/users";
 import { CardsDB } from "@girae/database/cards";
+import { EconomyDB } from "@girae/database/economy";
 import { VanitiesDB } from "@girae/database/vanities";
 import type { Platform } from "@girae/common/commands/types";
 
@@ -114,7 +115,8 @@ export class TestFixtures {
 
   /** Grants a user N copies of a card via the real CardsDB.addUserCard, looped N times. */
   async ownCard(userId: number, cardId: number, count: number): Promise<void> {
-    for (let i = 0; i < count; i++) await CardsDB.addUserCard(userId, cardId);
+    const incomeInflationRate = await EconomyDB.getIncomeInflationRate();
+    for (let i = 0; i < count; i++) await CardsDB.addUserCard(userId, cardId, incomeInflationRate);
     this.onCleanup(async () => { await db.delete(userCards).where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId))); });
   }
 

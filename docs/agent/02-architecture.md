@@ -79,10 +79,23 @@ export default class MyHook {
 - **Events are defined in `packages/common/hooks/types.ts`** (`HookEventMap`,
   one entry per event name) — add a new event there before adding a listener
   for it. `cards:new` (userId, cardId, previousCount, newCount, telegramId,
-  displayName, platform) is the only one today, fired once per distinct card
-  whose owned count went up in one action — see `cativeiroNotify.ts` for the
-  reference listener (checks `rarities.cativeiroThreshold` and DMs the player
-  on first crossing).
+  displayName, platform, optional completedSubcategories) is the only one
+  today, fired once per distinct card whose owned count went up in one
+  action. Two listeners react to it, each a different shape:
+  - `cativeiroNotify.ts` — does its own check (`rarities.cativeiroThreshold`)
+    and DMs the player on first crossing. Use this shape when the check only
+    matters to the hook itself.
+  - `collectionCompletionNotify.ts` — purely reactive, sends a DM per entry
+    in `event.completedSubcategories`. The claim itself (is a subcategory
+    now fully owned, credit the coins) happens inside whichever `*DB` call
+    granted the card (`CardsDB.addUserCard`/`GachaLogic.runBulkDraws`/
+    `CardsDB.executeTrade`, via the shared `CardsDB.claimCompletionsForCardGain`),
+    *not* in the hook — because the same command also needs that result
+    synchronously to mention the completion inline in its own reply (see the
+    "not for anything that needs to block or branch on a reply" rule below).
+    Use this shape when a non-hook code path needs the identical result the
+    hook reacts to; otherwise prefer `cativeiroNotify.ts`'s self-contained
+    shape.
 - **Emit from the command layer, never from `@girae/database`** — the same
   layering rule as messaging: `@girae/database` doesn't know about
   `@girae/commandeer` or DBOS. `girar.main.ts`/`girarauto.cards.ts` call

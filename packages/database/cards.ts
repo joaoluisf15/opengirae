@@ -12,13 +12,15 @@ import {
   wishlist,
   subcategoryGoals,
   cardCustomizationSubmissions,
+  subcategoryCompletionRewards,
   hipotecaSessions,
   hipotecaHoldings,
 } from "./schemas/cards";
 import { users } from "./schemas/users";
 import { eq, and, sql, ilike, desc, gte, gt, inArray } from "drizzle-orm";
-import { CARD_DISCARD_REWARDS } from "./constants";
+import { CARD_DISCARD_REWARDS, SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER } from "./constants";
 import { EconomyDB } from "./economy";
+import type { DrizzleClient } from "./decorators";
 
 export interface CativeiroSubmitter {
   platform: string;
@@ -26,6 +28,12 @@ export interface CativeiroSubmitter {
   name: string;
   chatId: string;
   threadId?: string;
+}
+
+export interface CompletedSubcategory {
+  subcategoryId: number;
+  subcategoryName: string;
+  coinsAwarded: number;
 }
 
 // the rarity /hipoteca holds - shared by the command layer's getUserCardsByRarityName call and this file's own filter
@@ -484,8 +492,76 @@ export class CardsDB {
       .then((a) => a?.[0]));
   })
 
+  static getSubcategoryIdsForCard = maybeTransaction('getSubcategoryIdsForCard', async (client, cardId: number): Promise<number[]> => {
+    const rows = await client.select({ subcategoryId: cardSubcategories.subcategoryId }).from(cardSubcategories).where(eq(cardSubcategories.cardId, cardId));
+    return rows.map(r => r.subcategoryId);
+  })
+
+  // completeness and "not already claimed" are both folded into this one INSERT, TOCTOU-safe; takes the caller's own client so it can join an already-open transaction.
+  private static async claimSubcategoryCompletionRewardWithClient(
+    client: DrizzleClient, userId: number, subcategoryId: number, incomeInflationRate: number,
+  ): Promise<{ ok: true; coinsAwarded: number } | { ok: false; reason: 'not_complete' }> {
+    const membership = await client
+      .select({ rarityName: rarities.name })
+      .from(cardSubcategories)
+      .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .where(eq(cardSubcategories.subcategoryId, subcategoryId));
+    if (membership.length === 0) return { ok: false, reason: 'not_complete' };
+
+    const baseSum = membership.reduce((sum, row) => sum + (CARD_DISCARD_REWARDS[row.rarityName] ?? 0), 0);
+    const coinsAwarded = Math.round(baseSum * SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER * incomeInflationRate);
+
+    const result = await client.execute<{ coinsAwarded: number }>(sql`
+      INSERT INTO ${subcategoryCompletionRewards}
+        (${sql.identifier(subcategoryCompletionRewards.userId.name)}, ${sql.identifier(subcategoryCompletionRewards.subcategoryId.name)}, ${sql.identifier(subcategoryCompletionRewards.coinsAwarded.name)})
+      SELECT ${userId}, ${subcategoryId}, ${coinsAwarded}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM ${cardSubcategories}
+        LEFT JOIN ${userCards} ON ${userCards.cardId} = ${cardSubcategories.cardId} AND ${userCards.userId} = ${userId}
+        WHERE ${cardSubcategories.subcategoryId} = ${subcategoryId} AND COALESCE(${userCards.count}, 0) = 0
+      )
+      ON CONFLICT (${sql.identifier(subcategoryCompletionRewards.userId.name)}, ${sql.identifier(subcategoryCompletionRewards.subcategoryId.name)}) DO NOTHING
+      RETURNING ${sql.identifier(subcategoryCompletionRewards.coinsAwarded.name)}
+    `);
+
+    const claimed = result.rows[0];
+    if (!claimed) return { ok: false, reason: 'not_complete' }; // already claimed, or not actually complete
+
+    await client.update(users).set({ coins: sql`${users.coins} + ${claimed.coinsAwarded}` }).where(eq(users.id, userId));
+    return { ok: true, coinsAwarded: claimed.coinsAwarded };
+  }
+
+  private static claimSubcategoryCompletionRewardTx = maybeTransaction('claimSubcategoryCompletionReward', async (
+    client, userId: number, subcategoryId: number, incomeInflationRate: number,
+  ) => {
+    return await CardsDB.claimSubcategoryCompletionRewardWithClient(client, userId, subcategoryId, incomeInflationRate);
+  })
+
+  // standalone entry point (opens its own transaction) - used by /clc and /clcimg's backfill check.
+  static claimSubcategoryCompletionReward = async (userId: number, subcategoryId: number) => {
+    const incomeInflationRate = await EconomyDB.getIncomeInflationRate();
+    return await CardsDB.claimSubcategoryCompletionRewardTx(userId, subcategoryId, incomeInflationRate);
+  }
+
+  // shared by addUserCard/runBulkDraws/executeTrade. Not private: gacha.ts calls this too.
+  static async claimCompletionsForCardGain(
+    client: DrizzleClient, userId: number, cardId: number, incomeInflationRate: number,
+  ): Promise<CompletedSubcategory[]> {
+    const subcategoryIds = await client.select({ id: cardSubcategories.subcategoryId }).from(cardSubcategories).where(eq(cardSubcategories.cardId, cardId));
+    const results: CompletedSubcategory[] = [];
+    for (const { id: subcategoryId } of subcategoryIds) {
+      const claim = await CardsDB.claimSubcategoryCompletionRewardWithClient(client, userId, subcategoryId, incomeInflationRate);
+      if (claim.ok) {
+        const [subcategory] = await client.select({ name: subcategories.name }).from(subcategories).where(eq(subcategories.id, subcategoryId)).limit(1);
+        results.push({ subcategoryId, subcategoryName: subcategory?.name ?? '?', coinsAwarded: claim.coinsAwarded });
+      }
+    }
+    return results;
+  }
+
   // TODO: would be cleaner as a raw SQL query
-  static addUserCard = maybeTransaction('addUserCard', async (client, userId: number, cardId: number) => {
+  static addUserCard = maybeTransaction('addUserCard', async (client, userId: number, cardId: number, incomeInflationRate: number) => {
     const existing = await client
       .select()
       .from(userCards)
@@ -500,7 +576,9 @@ export class CardsDB {
         .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)))
         .returning()
         .then(a => a?.[0]);
-      return updated ? { ...updated, previousCount: existing.count } : undefined;
+      if (!updated) return undefined;
+      const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
+      return { ...updated, previousCount: existing.count, completedSubcategories };
     }
 
     const user = await client
@@ -514,13 +592,16 @@ export class CardsDB {
       .values({ userId, cardId, tradable: user?.makeCardsTradeableByDefault ?? false })
       .returning()
       .then(a => a?.[0]);
-    return inserted ? { ...inserted, previousCount: 0 } : undefined;
+    if (!inserted) return undefined;
+    const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
+    return { ...inserted, previousCount: 0, completedSubcategories };
   })
 
   static executeTrade = maybeTransaction('executeTrade', async (
     client,
     userAId: number, offerA: { cardId: number; count: number }[],
     userBId: number, offerB: { cardId: number; count: number }[],
+    incomeInflationRate: number,
   ) => {
     if (userAId === userBId) throw new Error('executeTrade: userAId and userBId must differ');
     for (const offer of [offerA, offerB]) {
@@ -562,7 +643,7 @@ export class CardsDB {
       }
     };
 
-    const crossings: { userId: number; cardId: number; previousCount: number; newCount: number }[] = [];
+    const crossings: { userId: number; cardId: number; previousCount: number; newCount: number; completedSubcategories?: CompletedSubcategory[] }[] = [];
 
     const increment = async (userId: number, cardId: number, count: number) => {
       const existing = await client
@@ -573,7 +654,6 @@ export class CardsDB {
         .then(a => a?.[0]);
 
       const previousCount = existing?.count ?? 0;
-      crossings.push({ userId, cardId, previousCount, newCount: previousCount + count });
 
       if (existing) {
         await client
@@ -583,6 +663,9 @@ export class CardsDB {
       } else {
         await client.insert(userCards).values({ userId, cardId, count });
       }
+
+      const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
+      crossings.push({ userId, cardId, previousCount, newCount: previousCount + count, completedSubcategories });
     };
 
     for (const { cardId, count } of offerA) await decrement(userAId, cardId, count);

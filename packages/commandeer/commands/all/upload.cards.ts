@@ -8,7 +8,7 @@ import type { IncomingCommand } from '@girae/common/commands/types'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { mention } from '@girae/common/utilities/mention'
 import { buildCtx } from '../../services/syntheticCtx'
-import { cativeiroEligibilityGuard, MAX_UPLOAD_BYTES } from '../../services/cards/cativeiro'
+import { cativeiroEligibilityGuard, MAX_UPLOAD_BYTES, isVideoLike } from '../../services/cards/cativeiro'
 import type { cardCustomizationSubmissions } from '@girae/database/schemas/cards'
 
 type CardDetails = NonNullable<Awaited<ReturnType<typeof CardsDB.getCardWithDetails>>>
@@ -24,6 +24,7 @@ async function postDecisionMessage(
   reviewerName: string, clickerUserId: string, platform: 'telegram' | 'discord',
 ) {
   const isVideo = submission.mediaType === 'video'
+  const emoji = isVideo ? '🎥' : '🖼️'
   const hashtag = `#${hashtagPrefix}_DE_${isVideo ? 'VÍDEO' : 'FOTO'}`
   const mediaLabel = isVideo ? 'o vídeo customizado' : 'a imagem customizada'
   const reviewerMention = mention(platform, clickerUserId, reviewerName)
@@ -33,7 +34,7 @@ async function postDecisionMessage(
   if (submission.reviewMessageId) await deleteMsg(reviewCtx, submission.reviewMessageId)
 
   await reply(reviewCtx, {
-    content: `🖼️ ${hashtag}\n\n👮🏼 ${reviewerMention} ${verb} ${mediaLabel} de ${submitterMention} para o card ${card?.rarityEmoji ?? ''} \`${submission.cardId}\`. **${escapeMarkdown(card?.name ?? '?')}**.`,
+    content: `${emoji} ${hashtag}\n\n👮🏼 ${reviewerMention} ${verb} ${mediaLabel} de ${submitterMention} para o card ${card?.rarityEmoji ?? ''} \`${submission.cardId}\`. **${escapeMarkdown(card?.name ?? '?')}**.`,
     photoUrl: submission.mediaUrl,
     isVideo,
   })
@@ -67,7 +68,7 @@ export default class UploadCommand extends Command {
       return
     }
 
-    const isVideo = !!source?.isVideo
+    const isVideo = isVideoLike(source)
 
     const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
     if (!user) return

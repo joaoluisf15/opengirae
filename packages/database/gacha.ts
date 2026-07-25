@@ -2,6 +2,7 @@ import { maybeTransaction } from "./decorators";
 import { cards, categories, subcategories, rarities, cardSubcategories, userCards, cardDrawHistory } from "./schemas/cards";
 import { users } from "./schemas/users";
 import { eq, and, sql, inArray } from "drizzle-orm";
+import { CardsDB, type CompletedSubcategory } from "./cards";
 
 export interface SubcategoryForDraw {
   id: number;
@@ -33,6 +34,7 @@ export interface CardCountCrossing {
   cardId: number;
   previousCount: number;
   newCount: number;
+  completedSubcategories?: CompletedSubcategory[];
 }
 
 // shared by getCardsForDraw and runBulkDraws so the "what counts as Comum" definition can't drift between them
@@ -147,6 +149,7 @@ export class GachaLogic {
     userId: number,
     categoryOrder: number[],
     luckModifier: number,
+    incomeInflationRate: number,
     favoriteSubcategoryIds?: Set<number>,
   ): Promise<{ draws: BulkDrawResult[]; countsByCard: CardCountCrossing[] }> => {
     const distinctCategoryIds = [...new Set(categoryOrder)];
@@ -262,10 +265,13 @@ export class GachaLogic {
 
     await client.update(users).set({ usedDraws: sql`${users.usedDraws} + ${results.length}` }).where(eq(users.id, userId));
 
-    const countsByCard: CardCountCrossing[] = [...countByCard.entries()].map(([cardId, drawnCount]) => {
+    // once per distinct drawn card, not per copy - claimCompletionsForCardGain is idempotent anyway.
+    const countsByCard: CardCountCrossing[] = [];
+    for (const [cardId, drawnCount] of countByCard.entries()) {
       const previousCount = previousCountByCard.get(cardId) ?? 0;
-      return { cardId, previousCount, newCount: previousCount + drawnCount };
-    });
+      const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
+      countsByCard.push({ cardId, previousCount, newCount: previousCount + drawnCount, completedSubcategories });
+    }
 
     return { draws: results, countsByCard };
   })

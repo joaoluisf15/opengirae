@@ -1,7 +1,8 @@
 import { Command, QuickView, CommandArgument, CommandArgumentType } from '@girae/common/commands'
 import { DBOS } from '@dbos-inc/dbos-sdk'
-import { CardsDB, InsufficientCardError } from '@girae/database/cards'
+import { CardsDB, InsufficientCardError, type CompletedSubcategory } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
+import { EconomyDB } from '@girae/database/economy'
 import { reply, deleteMsg, awaitMultiPartyChoice } from '@girae/common/dbos/messaging'
 import { generateTradeImage } from '@girae/common/ditto'
 import { DEFAULT_AVATAR_URL } from '@girae/database/constants'
@@ -382,9 +383,10 @@ export default class TradeCommand extends Command {
       const offerAEntries = Object.entries(finalState.offers.proposer).map(([cardId, count]) => ({ cardId: Number(cardId), count }))
       const offerBEntries = Object.entries(finalState.offers.target).map(([cardId, count]) => ({ cardId: Number(cardId), count }))
 
-      let crossings: { userId: number; cardId: number; previousCount: number; newCount: number }[]
+      let crossings: { userId: number; cardId: number; previousCount: number; newCount: number; completedSubcategories?: CompletedSubcategory[] }[]
       try {
-        ({ crossings } = await CardsDB.executeTrade(proposerUser.id, offerAEntries, targetUser.id, offerBEntries))
+        const incomeInflationRate = await EconomyDB.getIncomeInflationRate();
+        ({ crossings } = await CardsDB.executeTrade(proposerUser.id, offerAEntries, targetUser.id, offerBEntries, incomeInflationRate))
       } catch (e) {
         await deleteMsg(ctx, groupMessageId)
         if (e instanceof InsufficientCardError) {
@@ -400,8 +402,13 @@ export default class TradeCommand extends Command {
 
       const image = await renderTradeImage(finalState, proposerAvatarUrl, proposerName, targetAvatarUrl, targetName)
 
+      const completionLines = [
+        ...crossings.filter(c => c.userId === proposerUser.id).flatMap(c => c.completedSubcategories ?? []).map(c => `🎉 ${m(ctx.message.author.id, proposerName)} completou a coleção **${escapeMarkdown(c.subcategoryName)}**!`),
+        ...crossings.filter(c => c.userId === targetUser.id).flatMap(c => c.completedSubcategories ?? []).map(c => `🎉 ${m(targetTelegramId, targetName)} completou a coleção **${escapeMarkdown(c.subcategoryName)}**!`),
+      ].join('\n')
+
       await reply(ctx, {
-        content: `💱 Troca entre ${m(ctx.message.author.id, proposerName)} e ${m(targetTelegramId, targetName)} FINALIZADA! ✅\n\n🃏 **${escapeMarkdown(proposerName)}** ofereceu:\n\n${proposerOfferText}\n\n🃏 **${escapeMarkdown(targetName)}** ofereceu:\n\n${targetOfferText}`,
+        content: `💱 Troca entre ${m(ctx.message.author.id, proposerName)} e ${m(targetTelegramId, targetName)} FINALIZADA! ✅\n\n🃏 **${escapeMarkdown(proposerName)}** ofereceu:\n\n${proposerOfferText}\n\n🃏 **${escapeMarkdown(targetName)}** ofereceu:\n\n${targetOfferText}${completionLines ? `\n\n${completionLines}` : ''}`,
         photoUrl: image.url,
       })
 

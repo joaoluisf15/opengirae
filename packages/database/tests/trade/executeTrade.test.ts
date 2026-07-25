@@ -1,7 +1,7 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { TestFixtures } from "@girae/tests";
 import { db } from "../../index";
-import { userCards, trades, cards, rarities } from "../../schemas/cards";
+import { userCards, trades, cards, rarities, subcategoryCompletionRewards } from "../../schemas/cards";
 import { eq, inArray, and } from "drizzle-orm";
 import { CardsDB, InsufficientCardError } from "../../cards";
 
@@ -47,6 +47,7 @@ describe("CardsDB.executeTrade", () => {
     await CardsDB.executeTrade(
       userAId, [{ cardId: cardXId, count: 1 }],
       userBId, [{ cardId: cardYId, count: 1 }],
+      1,
     );
 
     expect(await ownedCount(userAId, cardYId)).toBe(1);
@@ -67,6 +68,7 @@ describe("CardsDB.executeTrade", () => {
       CardsDB.executeTrade(
         userAId, [{ cardId: cardXId, count: 1 }],
         userBId, [{ cardId: cardYId, count: 1 }],
+        1,
       )
     ).rejects.toBeInstanceOf(InsufficientCardError);
 
@@ -83,6 +85,7 @@ describe("CardsDB.executeTrade", () => {
     await CardsDB.executeTrade(
       userAId, [{ cardId: cardXId, count: 2 }],
       userBId, [{ cardId: cardYId, count: 1 }],
+      1,
     );
 
     expect(await ownedCount(userAId, cardXId)).toBe(3); // 5 - 2, row survives (not deleted)
@@ -98,6 +101,7 @@ describe("CardsDB.executeTrade", () => {
     await CardsDB.executeTrade(
       userAId, [{ cardId: cardXId, count: 1 }, { cardId: cardYId, count: 1 }],
       userBId, [{ cardId: cardZId, count: 1 }],
+      1,
     );
 
     expect(await ownedCount(userBId, cardXId)).toBe(1);
@@ -107,7 +111,7 @@ describe("CardsDB.executeTrade", () => {
 
   test("rejects the same user on both sides", async () => {
     await expect(
-      CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 1 }], userAId, [{ cardId: cardYId, count: 1 }])
+      CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 1 }], userAId, [{ cardId: cardYId, count: 1 }], 1)
     ).rejects.toThrow('userAId and userBId must differ');
   });
 
@@ -119,13 +123,14 @@ describe("CardsDB.executeTrade", () => {
       CardsDB.executeTrade(
         userAId, [{ cardId: cardXId, count: 1 }, { cardId: cardXId, count: 2 }],
         userBId, [{ cardId: cardYId, count: 1 }],
+        1,
       )
     ).rejects.toThrow('same cardId twice');
   });
 
   test("rejects a non-positive count", async () => {
     await expect(
-      CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 0 }], userBId, [{ cardId: cardYId, count: 1 }])
+      CardsDB.executeTrade(userAId, [{ cardId: cardXId, count: 0 }], userBId, [{ cardId: cardYId, count: 1 }], 1)
     ).rejects.toThrow('must be positive');
   });
 
@@ -138,19 +143,21 @@ describe("CardsDB.executeTrade", () => {
     const { crossings } = await CardsDB.executeTrade(
       userAId, [{ cardId: cardXId, count: 1 }],
       userBId, [{ cardId: cardYId, count: 1 }],
+      1,
     );
 
     // B receives X: previousCount 3 -> newCount 4
-    expect(crossings).toContainEqual({ userId: userBId, cardId: cardXId, previousCount: 3, newCount: 4 });
+    expect(crossings).toContainEqual({ userId: userBId, cardId: cardXId, previousCount: 3, newCount: 4, completedSubcategories: [] });
     // A receives Y for the first time: previousCount 0 -> newCount 1
-    expect(crossings).toContainEqual({ userId: userAId, cardId: cardYId, previousCount: 0, newCount: 1 });
+    expect(crossings).toContainEqual({ userId: userAId, cardId: cardYId, previousCount: 0, newCount: 1, completedSubcategories: [] });
   });
 
   test("trading away cards that drop below the rarity's cativeiro threshold clears customization", async () => {
-    const [{ rarityId, previousThreshold }] = await db
+    const [row] = await db
       .select({ rarityId: cards.rarityId, previousThreshold: rarities.cativeiroThreshold })
       .from(cards).innerJoin(rarities, eq(rarities.id, cards.rarityId))
       .where(eq(cards.id, cardXId)).limit(1);
+    const { rarityId, previousThreshold } = row!;
     await db.update(rarities).set({ cativeiroThreshold: 5 }).where(eq(rarities.id, rarityId));
 
     try {
@@ -164,6 +171,7 @@ describe("CardsDB.executeTrade", () => {
       await CardsDB.executeTrade(
         userAId, [{ cardId: cardXId, count: 2 }],
         userBId, [{ cardId: cardYId, count: 1 }],
+        1,
       );
 
       const [remaining] = await db.select().from(userCards)
@@ -174,6 +182,31 @@ describe("CardsDB.executeTrade", () => {
       expect(remaining!.customMediaType).toBeNull();
     } finally {
       await db.update(rarities).set({ cativeiroThreshold: previousThreshold }).where(eq(rarities.id, rarityId));
+    }
+  });
+
+  test("attaches completedSubcategories to the receiving side's crossing entry when a trade completes a subcategory", async () => {
+    const categoryId = (await fx.category({ name: "Test ExecuteTrade Completion Category" })).id;
+    const subId = (await fx.subcategory({ categoryId, name: "Test ExecuteTrade Completion Sub" })).id;
+    const soloCardId = (await fx.card({ name: "Test ExecuteTrade Completion Card", subcategoryId: subId })).id;
+
+    try {
+      await resetOwnership();
+      await db.insert(userCards).values({ userId: userBId, cardId: soloCardId, count: 1 });
+
+      const { crossings } = await CardsDB.executeTrade(
+        userBId, [{ cardId: soloCardId, count: 1 }],
+        userAId, [],
+        1,
+      );
+
+      const entry = crossings.find(c => c.userId === userAId && c.cardId === soloCardId);
+      expect(entry?.completedSubcategories).toEqual([
+        { subcategoryId: subId, subcategoryName: "Test ExecuteTrade Completion Sub", coinsAwarded: expect.any(Number) },
+      ]);
+    } finally {
+      await db.delete(subcategoryCompletionRewards).where(and(eq(subcategoryCompletionRewards.userId, userAId), eq(subcategoryCompletionRewards.subcategoryId, subId)));
+      await resetOwnership();
     }
   });
 });

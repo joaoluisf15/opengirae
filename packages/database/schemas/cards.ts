@@ -222,6 +222,25 @@ export const subcategoryGoals = pgTable(
   ],
 );
 
+// one-time claim per (user, subcategory) - the composite PK is the TOCTOU guard against double-claiming.
+export const subcategoryCompletionRewards = pgTable(
+  "subcategory_completion_rewards",
+  {
+    userId: integer()
+      .notNull()
+      .references(() => users.id),
+    subcategoryId: integer()
+      .notNull()
+      .references(() => subcategories.id, { onDelete: "cascade" }),
+    coinsAwarded: integer().notNull(),
+    createdAt: timestamp().notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.subcategoryId] }),
+    index("subcategory_completion_rewards_sub_idx").on(table.subcategoryId),
+  ],
+);
+
 export const cardDrawHistory = pgTable(
   "card_draw_history",
   {

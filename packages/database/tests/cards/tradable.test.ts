@@ -28,29 +28,29 @@ describe("tradable flag: default preference + explicit override", () => {
   });
 
   test("addUserCard sets tradable=false on first acquisition when the user's default is off", async () => {
-    const row = await CardsDB.addUserCard(userId, cardAId);
+    const row = await CardsDB.addUserCard(userId, cardAId, 1);
     expect(row!.tradable).toBe(false);
     expect(await CardsDB.isCardTradable(userId, cardAId)).toBe(false);
   });
 
   test("addUserCard sets tradable=true on first acquisition when the user's default is on", async () => {
     await UsersDB.setMakeCardsTradeableByDefault(userId, true);
-    const row = await CardsDB.addUserCard(userId, cardAId);
+    const row = await CardsDB.addUserCard(userId, cardAId, 1);
     expect(row!.tradable).toBe(true);
   });
 
   test("addUserCard does not touch tradable on a repeat acquisition", async () => {
-    await CardsDB.addUserCard(userId, cardAId);
+    await CardsDB.addUserCard(userId, cardAId, 1);
     await CardsDB.setCardTradable(userId, cardAId, true);
 
     await UsersDB.setMakeCardsTradeableByDefault(userId, false);
-    const row = await CardsDB.addUserCard(userId, cardAId);
+    const row = await CardsDB.addUserCard(userId, cardAId, 1);
     expect(row!.count).toBe(2);
     expect(row!.tradable).toBe(true);
   });
 
   test("setCardTradable explicitly overrides the flag either direction", async () => {
-    await CardsDB.addUserCard(userId, cardBId);
+    await CardsDB.addUserCard(userId, cardBId, 1);
     expect(await CardsDB.isCardTradable(userId, cardBId)).toBe(false);
 
     await CardsDB.setCardTradable(userId, cardBId, true);
