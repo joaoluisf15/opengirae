@@ -592,6 +592,38 @@ export class CardsDB {
     return { trade, crossings };
   })
 
+  static getTradeStats = maybeTransaction('getTradeStats', async (client, userId: number) => {
+    const [initiatedRow, receivedRow] = await Promise.all([
+      client.select({ total: sql<string>`count(*)` }).from(trades).where(eq(trades.user1Id, userId)).then(r => r[0]),
+      client.select({ total: sql<string>`count(*)` }).from(trades).where(eq(trades.user2Id, userId)).then(r => r[0]),
+    ]);
+
+    const topGivenRows = await client
+      .select({ partnerId: trades.user2Id, partnerName: users.displayName, count: sql<string>`count(*)` })
+      .from(trades)
+      .innerJoin(users, eq(users.id, trades.user2Id))
+      .where(eq(trades.user1Id, userId))
+      .groupBy(trades.user2Id, users.displayName)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5);
+
+    const topReceivedRows = await client
+      .select({ partnerId: trades.user1Id, partnerName: users.displayName, count: sql<string>`count(*)` })
+      .from(trades)
+      .innerJoin(users, eq(users.id, trades.user1Id))
+      .where(eq(trades.user2Id, userId))
+      .groupBy(trades.user1Id, users.displayName)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5);
+
+    return {
+      initiated: Number(initiatedRow?.total ?? 0),
+      received: Number(receivedRow?.total ?? 0),
+      topGiven: topGivenRows.map(r => ({ partnerId: r.partnerId, partnerName: r.partnerName, count: Number(r.count) })),
+      topReceived: topReceivedRows.map(r => ({ partnerId: r.partnerId, partnerName: r.partnerName, count: Number(r.count) })),
+    };
+  })
+
   static addCardDrawHistory = maybeTransaction('addCardDrawHistory', async (client, userId: number, cardId: number, categoryId: number, subcategoryId: number) => {
     return await client.insert(cardDrawHistory).values({ userId, cardId, categoryId, subcategoryId }).returning().then(a => a?.[0]);
   })
