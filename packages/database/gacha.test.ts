@@ -39,8 +39,8 @@ describe("Gacha Logic - Subcategory Selection", () => {
 describe("Gacha Logic - Card Selection", () => {
   const mockCards: CardForDraw[] = [
     { id: 1, name: "Common Card", rarityModifier: 100, rarityWeight: 1000, rarityEmoji: '⚪', imageUrl: null, isCommon: true },
-    { id: 2, name: "Rare Card", rarityModifier: 100, rarityWeight: 100, rarityEmoji: '🔵', imageUrl: null, isCommon: true },
-    { id: 3, name: "Legendary Card", rarityModifier: 100, rarityWeight: 10, rarityEmoji: '🟡', imageUrl: null, isCommon: true },
+    { id: 2, name: "Rare Card", rarityModifier: 100, rarityWeight: 100, rarityEmoji: '🔵', imageUrl: null, isCommon: false },
+    { id: 3, name: "Legendary Card", rarityModifier: 100, rarityWeight: 10, rarityEmoji: '🟡', imageUrl: null, isCommon: false },
   ];
 
   test("selectCard returns a card based on weighted probability", () => {

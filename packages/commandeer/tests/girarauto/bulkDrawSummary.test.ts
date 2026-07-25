@@ -4,7 +4,7 @@ import { buildBulkDrawSummary, renderBulkDrawSummaryPage } from "../../services/
 
 function result(overrides: Partial<BulkDrawResult> & { id: number; rarityWeight: number }): BulkDrawResult {
   return {
-    card: { id: overrides.id, name: `Card ${overrides.id}`, rarityModifier: 100, rarityWeight: overrides.rarityWeight, rarityEmoji: '🃏', imageUrl: null },
+    card: { id: overrides.id, name: `Card ${overrides.id}`, rarityModifier: 100, rarityWeight: overrides.rarityWeight, rarityEmoji: '🃏', imageUrl: null, isCommon: false },
     categoryId: 1,
     categoryName: 'Test Category',
     categoryEmoji: '🎨',

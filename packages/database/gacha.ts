@@ -35,6 +35,9 @@ export interface CardCountCrossing {
   newCount: number;
 }
 
+// shared by getCardsForDraw and runBulkDraws so the "what counts as Comum" definition can't drift between them
+const IS_COMMON_SQL = sql<boolean>`${cards.rarityId} = (SELECT id FROM rarities ORDER BY weight DESC, id ASC LIMIT 1)`;
+
 export class GachaLogic {
   static selectSubcategories(
     subs: SubcategoryForDraw[],
@@ -131,7 +134,7 @@ export class GachaLogic {
         rarityWeight: rarities.weight,
         rarityEmoji: rarities.emoji,
         imageUrl: cards.imageUrl,
-        isCommon: sql<boolean>`${cards.rarityId} = (SELECT id FROM rarities ORDER BY weight DESC LIMIT 1)`,
+        isCommon: IS_COMMON_SQL,
       })
       .from(cards)
       .innerJoin(cardSubcategories, eq(cardSubcategories.cardId, cards.id))
@@ -176,7 +179,7 @@ export class GachaLogic {
         rarityWeight: rarities.weight,
         rarityEmoji: rarities.emoji,
         imageUrl: cards.imageUrl,
-        isCommon: sql<boolean>`${cards.rarityId} = (SELECT id FROM rarities ORDER BY weight DESC LIMIT 1)`,
+        isCommon: IS_COMMON_SQL,
       })
       .from(cardSubcategories)
       .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))
