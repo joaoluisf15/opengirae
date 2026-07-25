@@ -6,6 +6,10 @@ describe("isEmojiOnly", () => {
     expect(isEmojiOnly(emoji)).toBe(true);
   });
 
+  test.each(['🇮🇱', '🇧🇷', '🇺🇸'])("flag emoji %s is accepted (regional indicator pairs, not Extended_Pictographic)", (emoji) => {
+    expect(isEmojiOnly(emoji)).toBe(true);
+  });
+
   test.each(['hello', 'hi🎉', '123', ''])("%s is rejected", (text) => {
     expect(isEmojiOnly(text)).toBe(false);
   });

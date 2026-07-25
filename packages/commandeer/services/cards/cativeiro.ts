@@ -17,14 +17,12 @@ export async function cativeiroEligibilityGuard(card: CardDetails, ctx: Incoming
   return true
 }
 
-// a GIF isn't a real video, but the bot can't reliably tell it apart from one either -
-// bucket it under "vídeo" rather than mislabeling it as a photo.
 export function isVideoLike(source: { isVideo?: boolean; isAnimatedPhoto?: boolean } | undefined): boolean {
   return !!source?.isVideo || !!source?.isAnimatedPhoto
 }
 
-// ZWJ + variation selector-16 let multi-codepoint emoji (families, flags, skin tones) through too.
-const EMOJI_ONLY_REGEX = /^[\p{Extended_Pictographic}‍️]+$/u
+// ZWJ + variation selector-16 let multi-codepoint families/skin-tones through; flags are Regional_Indicator pairs, a separate Unicode class Extended_Pictographic doesn't cover.
+const EMOJI_ONLY_REGEX = /^[\p{Extended_Pictographic}\p{Regional_Indicator}‍️]+$/u
 
 export function isEmojiOnly(str: string): boolean {
   return EMOJI_ONLY_REGEX.test(str.trim())
@@ -38,7 +36,7 @@ export function containsRarityEmoji(str: string): boolean {
 }
 
 export function validateCustomEmoji(value: string): boolean | string {
-  if (!isEmojiOnly(value)) return '🥺 Manda um emoji de verdade pra mim personalizar seu card!'
+  if (!isEmojiOnly(value)) return '🤔 Manda um emoji de verdade, por favor.'
   if (containsRarityEmoji(value)) return '😅 Esse emoji já é usado pela bot para mostrar a raridade das cartas. Escolha outro!'
   return true
 }
