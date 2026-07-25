@@ -245,11 +245,19 @@ export const chocolateFactoryCorrections = pgTable("chocolate_factory_correction
   subcategoryId: integer().notNull().references(() => subcategories.id, { onDelete: "cascade" }),
 });
 
-export const trades = pgTable("trades", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  user1Id: integer().notNull().references(() => users.id),
-  user2Id: integer().notNull().references(() => users.id),
-  cardsUser1: integer().array().notNull(),
-  cardsUser2: integer().array().notNull(),
-  createdAt: timestamp().notNull().defaultNow(),
-});
+export const trades = pgTable(
+  "trades",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    user1Id: integer().notNull().references(() => users.id),
+    user2Id: integer().notNull().references(() => users.id),
+    cardsUser1: integer().array().notNull(),
+    cardsUser2: integer().array().notNull(),
+    createdAt: timestamp().notNull().defaultNow(),
+  },
+  (table) => [
+    // getTradeStats scans by each side separately - table grows monotonically, was seq-scanning
+    index("trades_user1_idx").on(table.user1Id),
+    index("trades_user2_idx").on(table.user2Id),
+  ],
+);
