@@ -13,6 +13,8 @@ import {
   subcategoryGoals,
   cardCustomizationSubmissions,
   subcategoryCompletionRewards,
+  hipotecaSessions,
+  hipotecaHoldings,
 } from "./schemas/cards";
 import { users } from "./schemas/users";
 import { eq, and, sql, ilike, desc, gte, gt, inArray } from "drizzle-orm";
@@ -33,6 +35,9 @@ export interface CompletedSubcategory {
   subcategoryName: string;
   coinsAwarded: number;
 }
+
+// the rarity /hipoteca holds - shared by the command layer's getUserCardsByRarityName call and this file's own filter
+export const HIPOTECA_RARITY_NAME = 'Lendário';
 
 export class InsufficientCardError extends Error {
   constructor(public userId: number, public cardId: number) {
@@ -269,6 +274,142 @@ export class CardsDB {
   static deleteCard = maybeTransaction('deleteCard', async (client, cardId: number) => {
     await client.delete(cardSubcategories).where(eq(cardSubcategories.cardId, cardId));
     await client.delete(cards).where(eq(cards.id, cardId));
+  })
+
+  static getUserCardsByRarityName = maybeTransaction('getUserCardsByRarityName', async (client, userId: number, rarityName: string) => {
+    return await client
+      .select({ cardId: cards.id, name: cards.name, rarityEmoji: rarities.emoji, count: userCards.count })
+      .from(userCards)
+      .innerJoin(cards, eq(cards.id, userCards.cardId))
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .where(and(eq(userCards.userId, userId), eq(rarities.name, rarityName), gt(userCards.count, 0)))
+      .orderBy(cards.name);
+  })
+
+  static getActiveHipotecaSession = maybeTransaction('getActiveHipotecaSession', async (client, userId: number) => {
+    const session = await client.select().from(hipotecaSessions).where(eq(hipotecaSessions.userId, userId)).limit(1).then(a => a?.[0]);
+    if (!session) return undefined;
+
+    const holdings = await client
+      .select({ cardId: cards.id, name: cards.name, rarityEmoji: rarities.emoji, count: hipotecaHoldings.count })
+      .from(hipotecaHoldings)
+      .innerJoin(cards, eq(cards.id, hipotecaHoldings.cardId))
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .where(eq(hipotecaHoldings.sessionId, session.id));
+
+    return { ...session, holdings };
+  })
+
+  static applyHipoteca = async (userId: number, staffId: number) => {
+    try {
+      return await CardsDB.applyHipotecaTx(userId, staffId);
+    } catch (e) {
+      // drizzle-orm 0.45 wraps the raw pg error (with .code) as .cause.
+      const code = (e as { code?: string }).code ?? (e as { cause?: { code?: string } }).cause?.code;
+      if (code === '23505') return { ok: false as const, reason: 'already_active' as const };
+      throw e;
+    }
+  }
+
+  private static applyHipotecaTx = maybeTransaction('applyHipoteca', async (client, userId: number, staffId: number) => {
+    // pre-check for the nicer error: an active hold already emptied user_cards, so the DELETE below would
+    // misreport nothing_to_hold. Real TOCTOU-safe guard is the unique index on userId, caught as 23505 above.
+    const existingSession = await client.select({ id: hipotecaSessions.id }).from(hipotecaSessions).where(eq(hipotecaSessions.userId, userId)).limit(1).then(a => a?.[0]);
+    if (existingSession) return { ok: false as const, reason: 'already_active' as const };
+
+    const heldIdRows = await client
+      .select({ cardId: userCards.cardId, name: cards.name })
+      .from(userCards)
+      .innerJoin(cards, eq(cards.id, userCards.cardId))
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .where(and(eq(userCards.userId, userId), eq(rarities.name, HIPOTECA_RARITY_NAME), gt(userCards.count, 0)));
+
+    if (heldIdRows.length === 0) return { ok: false as const, reason: 'nothing_to_hold' as const };
+    const nameByCardId = new Map(heldIdRows.map(r => [r.cardId, r.name]));
+
+    const currentUser = await client.select({ luckModifier: users.luckModifier }).from(users).where(eq(users.id, userId)).limit(1).then(a => a?.[0]);
+    if (!currentUser) return { ok: false as const, reason: 'nothing_to_hold' as const };
+
+    const session = await client.insert(hipotecaSessions)
+      .values({ userId, staffId, savedLuckModifier: currentUser.luckModifier })
+      .returning()
+      .then(a => a?.[0]);
+    if (!session) return { ok: false as const, reason: 'nothing_to_hold' as const };
+
+    // DELETE...RETURNING instead of an earlier SELECT: what's actually removed is what gets held, so a
+    // concurrent draw/trade/gift between the selects above and this delete can't vanish extra copies.
+    const deletedRows = await client.delete(userCards)
+      .where(and(eq(userCards.userId, userId), inArray(userCards.cardId, [...nameByCardId.keys()])))
+      .returning();
+
+    if (deletedRows.length === 0) return { ok: false as const, reason: 'nothing_to_hold' as const };
+
+    await client.insert(hipotecaHoldings).values(
+      deletedRows.map(r => ({
+        sessionId: session.id,
+        cardId: r.cardId,
+        count: r.count,
+        tradable: r.tradable,
+        customEmoji: r.customEmoji,
+        customMediaUrl: r.customMediaUrl,
+        customMediaType: r.customMediaType,
+      }))
+    );
+    await client.update(users).set({ luckModifier: 0 }).where(eq(users.id, userId));
+
+    return {
+      ok: true as const,
+      sessionId: session.id,
+      cards: deletedRows.map(r => ({ cardId: r.cardId, name: nameByCardId.get(r.cardId)!, count: r.count })),
+    };
+  })
+
+  static liftHipoteca = maybeTransaction('liftHipoteca', async (client, sessionId: number) => {
+    // FOR UPDATE so two concurrent lifts of the same session block/miss instead of both granting the cards
+    const session = await client.select().from(hipotecaSessions).where(eq(hipotecaSessions.id, sessionId)).for('update').limit(1).then(a => a?.[0]);
+    if (!session) return null;
+
+    const holdings = await client
+      .select({
+        cardId: hipotecaHoldings.cardId,
+        name: cards.name,
+        count: hipotecaHoldings.count,
+        tradable: hipotecaHoldings.tradable,
+        customEmoji: hipotecaHoldings.customEmoji,
+        customMediaUrl: hipotecaHoldings.customMediaUrl,
+        customMediaType: hipotecaHoldings.customMediaType,
+      })
+      .from(hipotecaHoldings)
+      .innerJoin(cards, eq(cards.id, hipotecaHoldings.cardId))
+      .where(eq(hipotecaHoldings.sessionId, sessionId));
+
+    if (holdings.length > 0) {
+      await client.insert(userCards)
+        .values(holdings.map(h => ({
+          userId: session.userId,
+          cardId: h.cardId,
+          count: h.count,
+          tradable: h.tradable,
+          customEmoji: h.customEmoji,
+          customMediaUrl: h.customMediaUrl,
+          customMediaType: h.customMediaType,
+        })))
+        .onConflictDoUpdate({
+          target: [userCards.userId, userCards.cardId],
+          // merges count, and only fills custom* in if the existing row doesn't already have them - never clobbers a real value
+          set: {
+            count: sql`${userCards.count} + excluded.${sql.identifier(userCards.count.name)}`,
+            customEmoji: sql`coalesce(${userCards.customEmoji}, excluded.${sql.identifier(userCards.customEmoji.name)})`,
+            customMediaUrl: sql`coalesce(${userCards.customMediaUrl}, excluded.${sql.identifier(userCards.customMediaUrl.name)})`,
+            customMediaType: sql`coalesce(${userCards.customMediaType}, excluded.${sql.identifier(userCards.customMediaType.name)})`,
+          },
+        });
+    }
+
+    await client.update(users).set({ luckModifier: session.savedLuckModifier }).where(eq(users.id, session.userId));
+    await client.delete(hipotecaSessions).where(eq(hipotecaSessions.id, sessionId)); // cascades hipoteca_holdings
+
+    return { cards: holdings.map(h => ({ cardId: h.cardId, name: h.name, count: h.count })) };
   })
 
   static getCorrection = maybeTransaction('getCorrection', async (client, targetName: string) => {
@@ -544,6 +685,38 @@ export class CardsDB {
       .then(a => a?.[0]);
 
     return { trade, crossings };
+  })
+
+  static getTradeStats = maybeTransaction('getTradeStats', async (client, userId: number) => {
+    const [initiatedRow, receivedRow] = await Promise.all([
+      client.select({ total: sql<string>`count(*)` }).from(trades).where(eq(trades.user1Id, userId)).then(r => r[0]),
+      client.select({ total: sql<string>`count(*)` }).from(trades).where(eq(trades.user2Id, userId)).then(r => r[0]),
+    ]);
+
+    const topGivenRows = await client
+      .select({ partnerId: trades.user2Id, partnerName: users.displayName, count: sql<string>`count(*)` })
+      .from(trades)
+      .innerJoin(users, eq(users.id, trades.user2Id))
+      .where(eq(trades.user1Id, userId))
+      .groupBy(trades.user2Id, users.displayName)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5);
+
+    const topReceivedRows = await client
+      .select({ partnerId: trades.user1Id, partnerName: users.displayName, count: sql<string>`count(*)` })
+      .from(trades)
+      .innerJoin(users, eq(users.id, trades.user1Id))
+      .where(eq(trades.user2Id, userId))
+      .groupBy(trades.user1Id, users.displayName)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5);
+
+    return {
+      initiated: Number(initiatedRow?.total ?? 0),
+      received: Number(receivedRow?.total ?? 0),
+      topGiven: topGivenRows.map(r => ({ partnerId: r.partnerId, partnerName: r.partnerName, count: Number(r.count) })),
+      topReceived: topReceivedRows.map(r => ({ partnerId: r.partnerId, partnerName: r.partnerName, count: Number(r.count) })),
+    };
   })
 
   static addCardDrawHistory = maybeTransaction('addCardDrawHistory', async (client, userId: number, cardId: number, categoryId: number, subcategoryId: number) => {

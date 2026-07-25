@@ -17,6 +17,7 @@ export interface CardForDraw {
   rarityWeight: number;
   rarityEmoji: string;
   imageUrl: string | null;
+  isCommon: boolean;
 }
 
 export interface BulkDrawResult {
@@ -35,6 +36,9 @@ export interface CardCountCrossing {
   newCount: number;
   completedSubcategories?: CompletedSubcategory[];
 }
+
+// shared by getCardsForDraw and runBulkDraws so the "what counts as Comum" definition can't drift between them
+const IS_COMMON_SQL = sql<boolean>`${cards.rarityId} = (SELECT id FROM rarities ORDER BY weight DESC, id ASC LIMIT 1)`;
 
 export class GachaLogic {
   static selectSubcategories(
@@ -79,15 +83,19 @@ export class GachaLogic {
     return selected;
   }
 
-  static selectCard(pool: CardForDraw[]): CardForDraw | undefined {
+  static selectCard(pool: CardForDraw[], luckModifier: number): CardForDraw | undefined {
     if (pool.length === 0) return undefined;
 
     let totalWeight = 0;
     const weights = pool.map(card => {
-      const weight = card.rarityWeight * (card.rarityModifier / 100);
+      let weight = card.rarityWeight * (card.rarityModifier / 100);
+      if (!card.isCommon) weight = weight * (luckModifier / 100);
       totalWeight += weight;
       return weight;
     });
+
+    // every card weighted to 0 - the old index-(-1) fallback would still deterministically pick one
+    if (totalWeight <= 0) return undefined;
 
     const r = Math.random() * totalWeight;
     let cumulativeSum = 0;
@@ -128,6 +136,7 @@ export class GachaLogic {
         rarityWeight: rarities.weight,
         rarityEmoji: rarities.emoji,
         imageUrl: cards.imageUrl,
+        isCommon: IS_COMMON_SQL,
       })
       .from(cards)
       .innerJoin(cardSubcategories, eq(cardSubcategories.cardId, cards.id))
@@ -173,6 +182,7 @@ export class GachaLogic {
         rarityWeight: rarities.weight,
         rarityEmoji: rarities.emoji,
         imageUrl: cards.imageUrl,
+        isCommon: IS_COMMON_SQL,
       })
       .from(cardSubcategories)
       .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))
@@ -205,7 +215,7 @@ export class GachaLogic {
       if (!chosenSubcategory) continue;
 
       const cardPool = cardPoolBySubcategory.get(chosenSubcategory.id) ?? [];
-      const drawnCard = GachaLogic.selectCard(cardPool);
+      const drawnCard = GachaLogic.selectCard(cardPool, luckModifier);
       if (!drawnCard) continue;
 
       results.push({

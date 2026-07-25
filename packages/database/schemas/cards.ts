@@ -154,6 +154,39 @@ export const cardCustomizationSubmissions = pgTable(
   ],
 );
 
+export const hipotecaSessions = pgTable(
+  "hipoteca_sessions",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer().notNull().references(() => users.id),
+    staffId: integer().notNull().references(() => users.id),
+    savedLuckModifier: integer().notNull(),
+    createdAt: timestamp().notNull().defaultNow(),
+  },
+  (table) => [
+    // a session row's existence is the "on hold" flag - /hipoteca toggles by checking for one
+    uniqueIndex("hipoteca_sessions_user_idx").on(table.userId),
+  ],
+);
+
+export const hipotecaHoldings = pgTable(
+  "hipoteca_holdings",
+  {
+    sessionId: integer()
+      .notNull()
+      .references(() => hipotecaSessions.id, { onDelete: "cascade" }),
+    cardId: integer().notNull().references(() => cards.id),
+    count: integer().notNull(),
+    tradable: boolean().notNull(),
+    customEmoji: text(),
+    customMediaUrl: text(),
+    customMediaType: cativeiroMediaType(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sessionId, table.cardId] }),
+  ],
+);
+
 export const wishlist = pgTable(
   "wishlist",
   {
@@ -231,11 +264,19 @@ export const chocolateFactoryCorrections = pgTable("chocolate_factory_correction
   subcategoryId: integer().notNull().references(() => subcategories.id, { onDelete: "cascade" }),
 });
 
-export const trades = pgTable("trades", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  user1Id: integer().notNull().references(() => users.id),
-  user2Id: integer().notNull().references(() => users.id),
-  cardsUser1: integer().array().notNull(),
-  cardsUser2: integer().array().notNull(),
-  createdAt: timestamp().notNull().defaultNow(),
-});
+export const trades = pgTable(
+  "trades",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    user1Id: integer().notNull().references(() => users.id),
+    user2Id: integer().notNull().references(() => users.id),
+    cardsUser1: integer().array().notNull(),
+    cardsUser2: integer().array().notNull(),
+    createdAt: timestamp().notNull().defaultNow(),
+  },
+  (table) => [
+    // getTradeStats scans by each side separately - table grows monotonically, was seq-scanning
+    index("trades_user1_idx").on(table.user1Id),
+    index("trades_user2_idx").on(table.user2Id),
+  ],
+);

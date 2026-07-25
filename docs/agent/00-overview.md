@@ -66,12 +66,13 @@ bug class here. Concretely, in this codebase:
   wrapped in a try/catch for the constraint-violation error code (Postgres
   `23505`) — see the purchase flow (`bought_items`' `unique(userId, itemId)`)
   and the store-item duplicate-name fix (`store_items`' `unique(title,
-  type)`, added after finding the exact gap this section warns about). The
-  constraint is the actual safety net; the pre-check (if you keep one at all)
-  is just a nicer error message for the common case. When the insert also
-  needs to be conditional on a *second*, separately-racing fact (not just
-  "does a row already exist" but also "is some other live condition still
-  true right now") — `CardsDB.claimSubcategoryCompletionRewardWithClient`'s
+  type)`, added after finding the exact gap this section warns about), and
+  `/hipoteca`'s hold flag (`hipoteca_sessions`' unique index on `userId`).
+  The constraint is the actual safety net; the pre-check (if you keep one at
+  all) is just a nicer error message for the common case. When the insert
+  also needs to be conditional on a *second*, separately-racing fact (not
+  just "does a row already exist" but also "is some other live condition
+  still true right now") — `CardsDB.claimSubcategoryCompletionRewardWithClient`'s
   one-time collection-completion payout is the example: a concurrent discard
   could un-complete the collection between a separate check and the insert —
   fold that condition into the same statement too, as
@@ -88,6 +89,13 @@ bug class here. Concretely, in this codebase:
   must differ) still needs an explicit check in the command body even when
   each argument individually resolved fine — `@CommandArgument` guards only
   ever see their own value, never a sibling's.
+- **`luckModifier` actually affects card-rarity odds** (`GachaLogic.selectCard`,
+  `packages/database/gacha.ts`) — it used to only influence which *subcategory*
+  got rolled, silently doing nothing at the card-rarity level. Any future
+  admin/staff feature that wants to suppress a player's draw odds (like
+  `/hipoteca`) should go through `luckModifier`, not invent a second
+  mechanism — and remember `selectCard` returns `undefined`, not a
+  deterministic fallback pick, when every card in a pool gets weighted to 0.
 
 **The general rule**: if an action needs to be "check something, then act on
 it," push the check into the same atomic operation as the act (a

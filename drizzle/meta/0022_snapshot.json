@@ -1,6 +1,6 @@
 {
-  "id": "5e8a7d5f-74a0-4ea2-9996-c7e53cda2f83",
-  "prevId": "63d4f07e-3f46-4562-8655-8facec0012b0",
+  "id": "6202389b-4202-43d4-94dd-fc2105819418",
+  "prevId": "310d809f-9c3a-4e3f-92ad-a3e6f6377880",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1052,6 +1052,95 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.subcategory_completion_rewards": {
+      "name": "subcategory_completion_rewards",
+      "schema": "",
+      "columns": {
+        "userId": {
+          "name": "userId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subcategoryId": {
+          "name": "subcategoryId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "coinsAwarded": {
+          "name": "coinsAwarded",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "subcategory_completion_rewards_sub_idx": {
+          "name": "subcategory_completion_rewards_sub_idx",
+          "columns": [
+            {
+              "expression": "subcategoryId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "subcategory_completion_rewards_userId_users_id_fk": {
+          "name": "subcategory_completion_rewards_userId_users_id_fk",
+          "tableFrom": "subcategory_completion_rewards",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "subcategory_completion_rewards_subcategoryId_subcategories_id_fk": {
+          "name": "subcategory_completion_rewards_subcategoryId_subcategories_id_fk",
+          "tableFrom": "subcategory_completion_rewards",
+          "tableTo": "subcategories",
+          "columnsFrom": [
+            "subcategoryId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "subcategory_completion_rewards_userId_subcategoryId_pk": {
+          "name": "subcategory_completion_rewards_userId_subcategoryId_pk",
+          "columns": [
+            "userId",
+            "subcategoryId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.subcategory_goals": {
       "name": "subcategory_goals",
       "schema": "",
@@ -1188,7 +1277,38 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "trades_user1_idx": {
+          "name": "trades_user1_idx",
+          "columns": [
+            {
+              "expression": "user1Id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trades_user2_idx": {
+          "name": "trades_user2_idx",
+          "columns": [
+            {
+              "expression": "user2Id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "trades_user1Id_users_id_fk": {
           "name": "trades_user1Id_users_id_fk",

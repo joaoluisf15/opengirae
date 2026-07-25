@@ -277,6 +277,21 @@ instead of trusting a diff by eye.
     rebind another test file's imports before your restore ever runs. This
     is exactly what broke an unrelated promo-code test the first time it was
     tried here.
+- **Testing a `DBOS.workflow()` command that also has a `@CommandArgument`
+  confirm step** (e.g. `/hipoteca`): calling `execute()` directly the way
+  `fakeCtx` normally implies skips `@CommandArgument`'s string-parsing
+  entirely — that parsing happens in `runCommand`
+  (`packages/commandeer/services/commandArguments.ts`), not inside the
+  decorator, so a direct call receives `args: undefined`. Pass the
+  already-resolved args object as the second argument instead (same trick
+  `privacy.test.ts` uses for a plain command), and drive the workflow like:
+  ```ts
+  const handle = await DBOS.startWorkflow(MyCommand, { workflowID }).execute(ctx, { target: platformId })
+  await new Promise(r => setTimeout(r, 500)) // let it reach DBOS.recv and register the listener
+  await DBOS.send(workflowID, { value: true }, 'my:confirm')
+  await handle.getResult()
+  ```
+  Assert DB state after `getResult()`, not reply content (see above).
 - **Sequence hygiene**: if a test deletes rows at the current max ID for a
   table (common when the DB already has other data), reset that table's
   identity sequence afterward (`setval(pg_get_serial_sequence(...), MAX(id))`)

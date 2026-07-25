@@ -145,7 +145,7 @@ export default class GirarCommand extends Command {
       messageId = subcategorySelection.messageId ?? messageId
 
       const cardPool = await GachaLogic.getCardsForDraw(subcategoryId);
-      const drawnCard = GachaLogic.selectCard(cardPool);
+      const drawnCard = GachaLogic.selectCard(cardPool, user.luckModifier);
 
       if (!drawnCard) {
         await reply(ctx, "Não tinha nenhum card nessa categoria... menos um giro pra você...");

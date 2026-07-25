@@ -1,6 +1,6 @@
 {
-  "id": "5e8a7d5f-74a0-4ea2-9996-c7e53cda2f83",
-  "prevId": "63d4f07e-3f46-4562-8655-8facec0012b0",
+  "id": "310d809f-9c3a-4e3f-92ad-a3e6f6377880",
+  "prevId": "5e8a7d5f-74a0-4ea2-9996-c7e53cda2f83",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1188,7 +1188,38 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "trades_user1_idx": {
+          "name": "trades_user1_idx",
+          "columns": [
+            {
+              "expression": "user1Id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trades_user2_idx": {
+          "name": "trades_user2_idx",
+          "columns": [
+            {
+              "expression": "user2Id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "trades_user1Id_users_id_fk": {
           "name": "trades_user1Id_users_id_fk",
