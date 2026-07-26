@@ -17,11 +17,10 @@ const MAX_CARDS = 50
 
 export default class DoarCommand extends Command {
   static override info = {
-    guards: ['isSpecial'],
     name: 'doar',
     description: 'Doa uma ou várias cartas para outro usuário',
     usage: '/doar <ID ou nome do usuário> <id ou nome do card> [id2 id3 ...] (ou * para doar tudo, ou em resposta ao usuário)',
-    aliases: ['micar'],
+    aliases: ['micar', 'imicae'],
     useWorkflow: true,
   }
 
