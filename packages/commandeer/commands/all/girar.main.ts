@@ -152,12 +152,10 @@ export default class GirarCommand extends Command {
         return;
       }
 
-      // TODO: could these be a single function call inside a transaction for better performance and stability?
-      const incomeInflationRate = await EconomyDB.getIncomeInflationRate();
-      const userCard = await CardsDB.addUserCard(user.id, drawnCard.id, incomeInflationRate);
-      await CardsDB.addCardDrawHistory(user.id, drawnCard.id, categoryId, subcategoryId);
-      // real card identity, not the pool it was drawn from
-      const [cardDetails, tags] = await Promise.all([
+      // addCardDrawHistory/getCardWithDetails/getSecondarySubcategoryNames don't depend on the inflation rate or on each other - run alongside the addUserCard chain instead of after it.
+      const [userCard, , cardDetails, tags] = await Promise.all([
+        EconomyDB.getIncomeInflationRate().then(rate => CardsDB.addUserCard(user.id, drawnCard.id, rate)),
+        CardsDB.addCardDrawHistory(user.id, drawnCard.id, categoryId, subcategoryId),
         CardsDB.getCardWithDetails(drawnCard.id),
         CardsDB.getSecondarySubcategoryNames(drawnCard.id),
       ]);

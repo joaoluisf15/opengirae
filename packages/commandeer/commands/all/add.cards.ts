@@ -19,7 +19,7 @@ export default class AddCommand extends Command {
   static override async execute(ctx: IncomingCommand) {
     const rawArgs = ctx.args.join(' ').trim()
     if (!rawArgs) {
-      await reply(ctx, this.info.usage)
+      await reply(ctx, `Uso: \`${this.info.usage}\``)
       return
     }
 
@@ -28,7 +28,7 @@ export default class AddCommand extends Command {
     if (tokens.length === 1 || !tokens.every(t => /^\d+$/.test(t))) {
       const outcome = await resolveCardByIdOrName(rawArgs)
       if (!outcome.ok) {
-        await reply(ctx, outcome.message ?? this.info.usage)
+        await reply(ctx, outcome.message ?? `Uso: \`${this.info.usage}\``)
         return
       }
       const card = outcome.value as { id: number; name: string; imageUrl: string | null }

@@ -8,7 +8,7 @@ import * as schema_audit from "./schemas/audit";
 import * as schema_promo from "./schemas/promo";
 import * as schema_economy from "./schemas/economy";
 
-export const config = { connectionString: process.env.DATABASE_URL! };
+export const config = { connectionString: process.env.DATABASE_URL!, max: 15 };
 const pool = new Pool(config);
 
 const schema = { ...schema_cards, ...schema_users, ...schema_audit, ...schema_promo, ...schema_economy };

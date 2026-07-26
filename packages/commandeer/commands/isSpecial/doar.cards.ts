@@ -31,7 +31,7 @@ export default class DoarCommand extends Command {
   ])
   static override async execute(ctx: IncomingCommand, args: { target: string; cardsRaw?: string }) {
     if (!args.cardsRaw) {
-      await reply(ctx, this.info.usage)
+      await reply(ctx, `Uso: \`${this.info.usage}\``)
       return
     }
 
@@ -78,7 +78,7 @@ export default class DoarCommand extends Command {
       if (tokens.length === 1 || !tokens.every(t => /^\d+$/.test(t))) {
         const outcome = await resolveCardByIdOrName(args.cardsRaw)
         if (!outcome.ok) {
-          await reply(ctx, outcome.message ?? this.info.usage)
+          await reply(ctx, outcome.message ?? `Uso: \`${this.info.usage}\``)
           return
         }
         cardIds = [(outcome.value as { id: number }).id]

@@ -10,7 +10,7 @@ startHealthServer(parseInt(process.env.PORT ?? '8080', 10))
 DBOS.setConfig({
     name: 'openGIRAÊ',
     systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL!,
-    systemDatabasePoolSize: 5
+    systemDatabasePoolSize: 10
 })
 
 await DBOS.launch()
