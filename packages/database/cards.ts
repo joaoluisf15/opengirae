@@ -755,7 +755,7 @@ export class CardsDB {
       .leftJoin(cardSubcategories, and(eq(cardSubcategories.cardId, cards.id), eq(cardSubcategories.isMain, true)))
       .leftJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
       .leftJoin(categories, eq(categories.id, subcategories.categoryId))
-      .where(ilike(cards.name, `%${query}%`))
+      .where(sql`immutable_unaccent(${cards.name}) ilike immutable_unaccent(${'%' + query + '%'})`)
       .limit(limit);
   })
 
@@ -804,7 +804,7 @@ export class CardsDB {
       })
       .from(subcategories)
       .innerJoin(categories, eq(categories.id, subcategories.categoryId))
-      .where(ilike(subcategories.name, `%${query}%`))
+      .where(sql`immutable_unaccent(${subcategories.name}) ilike immutable_unaccent(${'%' + query + '%'})`)
       .limit(limit);
   })
 

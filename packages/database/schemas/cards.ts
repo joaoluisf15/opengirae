@@ -54,6 +54,7 @@ export const subcategories = pgTable(
   (table) => [
     // every /girar draw filters subcategories by categoryId
     index("subcategories_category_idx").on(table.categoryId),
+    index("subcategories_name_unaccent_trgm_idx").using("gin", sql`immutable_unaccent(${table.name}) gin_trgm_ops`),
   ],
 );
 
@@ -73,6 +74,7 @@ export const cards = pgTable(
   (table) => [
     // ilike(name, '%query%') needs pg_trgm's operator class, a plain btree can't do it
     index("cards_name_trgm_idx").using("gin", sql`${table.name} gin_trgm_ops`),
+    index("cards_name_unaccent_trgm_idx").using("gin", sql`immutable_unaccent(${table.name}) gin_trgm_ops`),
   ],
 );
 
