@@ -1,4 +1,4 @@
-import { Worker, DelayedError, UnrecoverableError, MetricsTime } from 'bullmq'
+import { Worker, DelayedError, MetricsTime } from 'bullmq'
 import { connection } from '@girae/common/queue'
 import { RESPONSE_QUEUE_NAME } from '@girae/common/queue/constants'
 import { sendAnswer } from './handler'
@@ -25,7 +25,8 @@ export const worker = new Worker(RESPONSE_QUEUE_NAME, async (job, token) => {
       throw new DelayedError()
     }
     if (isPermanentSendError(err)) {
-      throw new UnrecoverableError(err.message)
+      info('answerer', `Response job ${job.id} (${jobLabel(job.data)}) permanently unsendable, not retrying: ${err.message}`)
+      return
     }
     throw err
   }

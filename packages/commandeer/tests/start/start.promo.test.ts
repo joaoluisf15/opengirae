@@ -11,6 +11,14 @@ import { executeCommand } from "../../services/commands";
 // Initialize the telegram mock at the module level before any imports that use it.
 const { sentMessages } = mockTelegram();
 
+async function waitForSentMessage(minLength: number, timeoutMs = 5000): Promise<void> {
+    const startTime = Date.now();
+    while (sentMessages.length < minLength) {
+        if (Date.now() - startTime > timeoutMs) throw new Error(`Timeout waiting for sentMessages.length >= ${minLength}`);
+        await new Promise(resolve => setTimeout(resolve, 25));
+    }
+}
+
 describe("/start promo code E2E", () => {
     const fx = new TestFixtures();
     let testUserId: number;
@@ -52,8 +60,7 @@ describe("/start promo code E2E", () => {
         // Call the command execute directly
         await StartCommand.execute(ctx, { payload: codeStr });
 
-        // Wait a tiny bit for the answerer worker to pick up the reply from the queue
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await waitForSentMessage(1);
 
         const userRow = await db.query.users.findFirst({
             where: (u, { eq }) => eq(u.id, testUserId)
@@ -95,7 +102,7 @@ describe("/start promo code E2E", () => {
             const ctx = fakeCtx({ name: 'start', authorId: dispatchPlatformId, platform: 'telegram', chatId: 'chat-1', args: [dispatchCodeStr] });
             await executeCommand(ctx);
 
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            await waitForSentMessage(1);
 
             const userRow = await db.query.users.findFirst({ where: (u, { eq }) => eq(u.id, dispatchUserId) });
             expect(userRow?.coins).toBe(110); // 10 initial + (50 * incomeInflationRate(2))
