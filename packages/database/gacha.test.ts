@@ -38,9 +38,9 @@ describe("Gacha Logic - Subcategory Selection", () => {
 
 describe("Gacha Logic - Card Selection", () => {
   const mockCards: CardForDraw[] = [
-    { id: 1, name: "Common Card", rarityModifier: 100, rarityWeight: 1000, rarityEmoji: '⚪', imageUrl: null, isCommon: true },
-    { id: 2, name: "Rare Card", rarityModifier: 100, rarityWeight: 100, rarityEmoji: '🔵', imageUrl: null, isCommon: false },
-    { id: 3, name: "Legendary Card", rarityModifier: 100, rarityWeight: 10, rarityEmoji: '🟡', imageUrl: null, isCommon: false },
+    { id: 1, name: "Common Card", rarityModifier: 100, rarityWeight: 1000, rarityEmoji: '⚪', imageUrl: null, rank: 0 },
+    { id: 2, name: "Rare Card", rarityModifier: 100, rarityWeight: 100, rarityEmoji: '🔵', imageUrl: null, rank: 1 },
+    { id: 3, name: "Legendary Card", rarityModifier: 100, rarityWeight: 10, rarityEmoji: '🟡', imageUrl: null, rank: 2 },
   ];
 
   test("selectCard returns a card based on weighted probability", () => {
@@ -71,8 +71,8 @@ describe("Gacha Logic - Card Selection", () => {
 
   test("card.rarityModifier boosts specific card drop rate", () => {
     const cards: CardForDraw[] = [
-      { id: 1, name: "Normal Rare", rarityModifier: 100, rarityWeight: 100, rarityEmoji: '🔵', imageUrl: null, isCommon: true },
-      { id: 2, name: "Boosted Rare", rarityModifier: 200, rarityWeight: 100, rarityEmoji: '🔵', imageUrl: null, isCommon: true }, // 2x as likely as Normal Rare
+      { id: 1, name: "Normal Rare", rarityModifier: 100, rarityWeight: 100, rarityEmoji: '🔵', imageUrl: null, rank: 0 },
+      { id: 2, name: "Boosted Rare", rarityModifier: 200, rarityWeight: 100, rarityEmoji: '🔵', imageUrl: null, rank: 0 },
     ];
 
     const iterations = 10000;

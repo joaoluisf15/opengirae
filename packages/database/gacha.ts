@@ -17,7 +17,7 @@ export interface CardForDraw {
   rarityWeight: number;
   rarityEmoji: string;
   imageUrl: string | null;
-  isCommon: boolean;
+  rank: number;
 }
 
 export interface BulkDrawResult {
@@ -37,8 +37,7 @@ export interface CardCountCrossing {
   completedSubcategories?: CompletedSubcategory[];
 }
 
-// shared by getCardsForDraw and runBulkDraws so the "what counts as Comum" definition can't drift between them
-const IS_COMMON_SQL = sql<boolean>`${cards.rarityId} = (SELECT id FROM rarities ORDER BY weight DESC, id ASC LIMIT 1)`;
+const RARITY_RANK_SQL = sql<number>`(SELECT COUNT(*)::int FROM rarities AS r2 WHERE r2.weight > ${rarities.weight})`;
 
 export class GachaLogic {
   static selectSubcategories(
@@ -88,13 +87,11 @@ export class GachaLogic {
 
     let totalWeight = 0;
     const weights = pool.map(card => {
-      let weight = card.rarityWeight * (card.rarityModifier / 100);
-      if (!card.isCommon) weight = weight * (luckModifier / 100);
+      const weight = card.rarityWeight * (card.rarityModifier / 100) * Math.pow(luckModifier / 100, card.rank);
       totalWeight += weight;
       return weight;
     });
 
-    // every card weighted to 0 - the old index-(-1) fallback would still deterministically pick one
     if (totalWeight <= 0) return undefined;
 
     const r = Math.random() * totalWeight;
@@ -136,7 +133,7 @@ export class GachaLogic {
         rarityWeight: rarities.weight,
         rarityEmoji: rarities.emoji,
         imageUrl: cards.imageUrl,
-        isCommon: IS_COMMON_SQL,
+        rank: RARITY_RANK_SQL,
       })
       .from(cards)
       .innerJoin(cardSubcategories, eq(cardSubcategories.cardId, cards.id))
@@ -182,7 +179,7 @@ export class GachaLogic {
         rarityWeight: rarities.weight,
         rarityEmoji: rarities.emoji,
         imageUrl: cards.imageUrl,
-        isCommon: IS_COMMON_SQL,
+        rank: RARITY_RANK_SQL,
       })
       .from(cardSubcategories)
       .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))

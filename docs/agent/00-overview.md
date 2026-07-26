@@ -91,8 +91,13 @@ bug class here. Concretely, in this codebase:
   ever see their own value, never a sibling's.
 - **`luckModifier` actually affects card-rarity odds** (`GachaLogic.selectCard`,
   `packages/database/gacha.ts`) — it used to only influence which *subcategory*
-  got rolled, silently doing nothing at the card-rarity level. Any future
-  admin/staff feature that wants to suppress a player's draw odds (like
+  got rolled, silently doing nothing at the card-rarity level. Each card's
+  weight is multiplied by `(luckModifier/100) ** rank`, where `rank` is how
+  many rarities have a strictly higher `weight` (0 for the single
+  highest-weight rarity, 1 for the next tier, etc.) — so `luckModifier: 100`
+  is a no-op for every rank (baseline odds, unchanged from before this existed),
+  and moving away from 100 affects rarer tiers more than less-rare ones. Any
+  future admin/staff feature that wants to suppress a player's draw odds (like
   `/hipoteca`) should go through `luckModifier`, not invent a second
   mechanism — and remember `selectCard` returns `undefined`, not a
   deterministic fallback pick, when every card in a pool gets weighted to 0.
