@@ -1029,9 +1029,11 @@ export class CardsDB {
         .select({
           id: cards.id,
           name: cards.name,
+          imageUrl: cards.imageUrl,
           rarityName: rarities.name,
           rarityEmoji: rarities.emoji,
           subcategoryEmoji: sql<string | null>`COALESCE(${subcategories.emoji}, ${categories.emoji})`,
+          subcategoryName: subcategories.name,
           ownedCount: userCards.count,
           customEmoji: userCards.customEmoji,
           customMediaUrl: userCards.customMediaUrl,

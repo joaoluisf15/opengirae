@@ -45,4 +45,12 @@ describe("CardsDB.getCativeiroEligibleCards", () => {
     const category = await CardsDB.getCategory(categoryId);
     expect(row?.subcategoryEmoji).toBe(category?.emoji);
   });
+
+  test("includes the card's main subcategory name and default image URL", async () => {
+    const { rows } = await CardsDB.getCativeiroEligibleCards(userId);
+    const row = rows.find(r => r.id === cardAtId);
+    const card = await CardsDB.getCardWithDetails(cardAtId);
+    expect(row?.subcategoryName).toBe("Test Cativeiro Sub");
+    expect(row?.imageUrl).toBe(card?.imageUrl);
+  });
 });

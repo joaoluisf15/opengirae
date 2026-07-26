@@ -37,6 +37,7 @@ export interface DittoProfileData {
   favoriteCardImageURL?: string
   favoriteCardRarity?: string
   favoriteCardColor?: string
+  favoriteCardEmoji?: string
   totalCards: number
   hideEmojis?: boolean
 }

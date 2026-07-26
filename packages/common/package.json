@@ -6,5 +6,8 @@
   "dependencies": {
     "redis": "^6.1.0",
     "@girae/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@girae/tests": "workspace:*"
   }
 }

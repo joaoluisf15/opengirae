@@ -14,6 +14,6 @@ export default class CativeiroNotifyHook {
     if (event.previousCount >= card.cativeiroThreshold || event.newCount < card.cativeiroThreshold) return
 
     const dm = buildCtx(event.platform, event.telegramId, event.displayName, event.telegramId)
-    await reply(dm, `🎉 Parabéns! Você agora tem **${card.cativeiroThreshold}x** ${card.rarityEmoji} \`${event.cardId}\`. **${escapeMarkdown(card.name)}** e já pode personalizar esse card com um vídeo/foto e emoji de sua preferência!\n\nPara mais informações, use /upload ou /cativeiros`)
+    await reply(dm, `🎉 Parabéns! Você agora tem **${card.cativeiroThreshold}x** ${card.rarityEmoji} \`${event.cardId}\`. **${escapeMarkdown(card.name)}** e já pode personalizar esse card com um vídeo/foto e emoji de sua preferência.\n\nPara mais informações, use /upload ou /cativeiros.`)
   }
 }
