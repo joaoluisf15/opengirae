@@ -474,6 +474,13 @@ export class CardsDB {
     return card;
   })
 
+  static getAllOwnedCardIds = maybeTransaction('getAllOwnedCardIds', async (client, userId: number) => {
+    return await client
+      .select({ cardId: userCards.cardId, count: userCards.count })
+      .from(userCards)
+      .where(and(eq(userCards.userId, userId), gt(userCards.count, 0)));
+  })
+
   static getUserCard = maybeTransaction('getUserCard', async (client, userId: number, cardId: number) => {
     return await client
       .select()

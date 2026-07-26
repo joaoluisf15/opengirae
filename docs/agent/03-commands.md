@@ -27,12 +27,16 @@ packages/commandeer/commands/<guards>/<name>.<category>.ts
   ```
   Set `usage` on every command, not just ones with a literal `Uso:` string —
   it's the automatic fallback message.
-- **Guards**: `packages/commandeer/services/guards.ts`. Currently only
-  `isAdmin` is registered; an unregistered guard name (e.g. `all`) is a
-  silent no-op. Add a new guard function there, not per-command. Note:
-  `isAdmin` also auto-passes for one hardcoded staff group chat ID — check
-  the guard's source before assuming every admin command requires
-  `users.isAdmin`.
+- **Guards**: `packages/commandeer/services/guards.ts`. `isAdmin` and
+  `isSpecial` (checks `users.specialUser`) are registered; an unregistered
+  guard name (e.g. `all`) is a silent no-op. Add a new guard function there,
+  not per-command. Note: `isAdmin` also auto-passes for one hardcoded staff
+  group chat ID — check the guard's source before assuming every admin
+  command requires `users.isAdmin`. **A failed guard never replies** —
+  `services/commands.ts` just returns — which is exactly what a command that
+  must not reveal its own existence to unauthorized users wants (`/doar`'s
+  `isSpecial` gate relies on this: a non-special user typing `/doar` gets no
+  response at all, indistinguishable from a typo'd command name).
 - **Aliases**: pick names that read naturally in Portuguese first (this bot's
   primary audience), with an English alias where it helps (`/wish` /
   `/wishlist`). Don't be shy about silly/casual aliases either — `/girar`'s

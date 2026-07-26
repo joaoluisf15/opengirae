@@ -13,6 +13,10 @@ export const guards: Record<string, Guard> = {
       return false
     }
     return true
+  },
+  isSpecial: async (cmd) => {
+    const user = await getUserByPlatformAccountCached(cmd.message.platform as 'telegram' | 'discord', cmd.message.author.id)
+    return !!user?.specialUser
   }
 }
 
