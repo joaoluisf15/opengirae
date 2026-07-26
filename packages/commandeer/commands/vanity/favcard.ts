@@ -20,7 +20,8 @@ export default class FavCardCommand extends Command {
     const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
     if (!user) return
 
-    if (!(await CardsDB.hasUserCard(user.id, args.card.id))) {
+    const userCard = await CardsDB.getUserCard(user.id, args.card.id)
+    if (!userCard) {
       await reply(ctx, 'Oops... parece que você ainda não tem esse personagem. 😅\nEncontre-o usando `/girar` para favoritá-lo.')
       return
     }
@@ -29,7 +30,7 @@ export default class FavCardCommand extends Command {
 
     await reply(ctx, {
       content: `🌟 **${escapeMarkdown(args.card.name)}** é agora o seu personagem favorito!`,
-      photoUrl: args.card.imageUrl ?? undefined,
+      photoUrl: userCard.customMediaUrl ?? args.card.imageUrl ?? undefined,
     })
   }
 }
