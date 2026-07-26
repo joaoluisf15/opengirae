@@ -5,7 +5,7 @@ import { users } from "@girae/database/schemas/users";
 import { promoCodes, promoCodeRedemptions } from "@girae/database/schemas/promo";
 import { EconomyDB } from "@girae/database/economy";
 import { eq } from "drizzle-orm";
-import StartCommand from "../../commands/all/start.main";
+import StartCommand from "../../commands/main/start";
 import { executeCommand } from "../../services/commands";
 
 // Initialize the telegram mock at the module level before any imports that use it.

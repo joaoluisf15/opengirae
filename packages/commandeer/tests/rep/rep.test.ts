@@ -4,7 +4,7 @@ import { db } from "@girae/database/index";
 import { userProfiles } from "@girae/database/schemas/users";
 import { UsersDB } from "@girae/database/users";
 import { eq } from "drizzle-orm";
-import RepCommand from "../../commands/all/rep.users";
+import RepCommand from "../../commands/users/rep";
 
 mockTelegram();
 

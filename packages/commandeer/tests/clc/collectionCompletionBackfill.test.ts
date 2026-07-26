@@ -4,8 +4,8 @@ import { CardsDB } from "@girae/database/cards";
 import { db } from "@girae/database/index";
 import { subcategoryCompletionRewards, userCards } from "@girae/database/schemas/cards";
 import { eq, and } from "drizzle-orm";
-import CollectionCommand from "../../commands/all/clc.cards";
-import CollectionImageCommand from "../../commands/all/clcimg.cards";
+import CollectionCommand from "../../commands/cards/clc";
+import CollectionImageCommand from "../../commands/cards/clcimg";
 
 const mock = mockTelegram();
 

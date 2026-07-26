@@ -4,7 +4,7 @@ import { db } from "@girae/database/index";
 import { users } from "@girae/database/schemas/users";
 import { categories, userCards, cardDrawHistory } from "@girae/database/schemas/cards";
 import { eq } from "drizzle-orm";
-import GirarAutoCommand from "../../commands/all/girarauto.cards";
+import GirarAutoCommand from "../../commands/cards/girarauto";
 
 mockTelegram();
 

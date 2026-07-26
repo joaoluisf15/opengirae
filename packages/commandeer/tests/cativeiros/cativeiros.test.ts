@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { mockTelegram, fakeCtx, TestFixtures } from "@girae/tests";
-import CativeirosCommand, { renderPage } from "../../commands/all/cativeiros.cards";
+import CativeirosCommand, { renderPage } from "../../commands/cards/cativeiros";
 
 mockTelegram();
 

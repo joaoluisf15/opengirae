@@ -1,8 +1,8 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { mockTelegram, bootstrapCommandeerWorkers, fakeCtx, TestFixtures } from "@girae/tests";
 import { UsersDB } from "@girae/database/users";
-import PrivacyCommand from "../../commands/all/privacy.users";
-import ProfileCommand from "../../commands/all/profile.users";
+import PrivacyCommand from "../../commands/users/privacy";
+import ProfileCommand from "../../commands/users/profile";
 
 mockTelegram();
 

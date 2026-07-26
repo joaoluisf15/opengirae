@@ -7,7 +7,7 @@ import { db } from "@girae/database/index";
 import { rarities } from "@girae/database/schemas/cards";
 import { auditLogs } from "@girae/database/schemas/audit";
 import { eq } from "drizzle-orm";
-import HipotecaCommand from "../../commands/isAdmin/hipoteca.admin";
+import HipotecaCommand from "../../commands/admin/hipoteca";
 
 mockTelegram();
 

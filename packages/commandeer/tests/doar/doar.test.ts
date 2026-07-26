@@ -6,7 +6,7 @@ import { db } from "@girae/database/index";
 import { userCards, trades } from "@girae/database/schemas/cards";
 import { auditLogs } from "@girae/database/schemas/audit";
 import { eq, and, or } from "drizzle-orm";
-import DoarCommand from "../../commands/isSpecial/doar.cards";
+import DoarCommand from "../../commands/cards/doar";
 
 mockTelegram();
 

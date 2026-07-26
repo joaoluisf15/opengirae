@@ -2,7 +2,7 @@ import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { mockTelegram, bootstrapCommandeerWorkers, fakeCtx, TestFixtures } from "@girae/tests";
 import { EconomyDB } from "@girae/database/economy";
 import { VanitiesDB } from "@girae/database/vanities";
-import BackgroundCommand from "../../commands/all/bg.vanity";
+import BackgroundCommand from "../../commands/vanity/bg";
 
 const { sentMessages } = mockTelegram();
 

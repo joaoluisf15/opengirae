@@ -4,7 +4,7 @@ import { db } from "@girae/database/index";
 import { users } from "@girae/database/schemas/users";
 import { EconomyDB } from "@girae/database/economy";
 import { eq } from "drizzle-orm";
-import ReceitaCommand from "../../commands/all/receita.main";
+import ReceitaCommand from "../../commands/main/receita";
 
 const { sentMessages } = mockTelegram();
 

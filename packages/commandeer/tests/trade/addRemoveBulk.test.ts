@@ -3,8 +3,8 @@ import { mockTelegram, bootstrapCommandeerWorkers, fakeCtx, TestFixtures, StandI
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { rawClient } from "@girae/common/queue";
 import { lockKey, tryAcquireLock } from "../../services/cards/tradeLock";
-import AddCommand from "../../commands/all/add.cards";
-import RemoveCommand from "../../commands/all/remove.cards";
+import AddCommand from "../../commands/cards/add";
+import RemoveCommand from "../../commands/cards/remove";
 
 mockTelegram();
 

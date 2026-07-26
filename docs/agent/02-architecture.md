@@ -98,7 +98,7 @@ export default class MyHook {
     shape.
 - **Emit from the command layer, never from `@girae/database`** — the same
   layering rule as messaging: `@girae/database` doesn't know about
-  `@girae/commandeer` or DBOS. `girar.main.ts`/`girarauto.cards.ts` call
+  `@girae/commandeer` or DBOS. `main/girar.ts`/`cards/girarauto.ts` call
   `emitHook`/`emitCardsNew` (from `../../loaders/hooks`) right after the
   `*DB`/`GachaLogic` call that actually granted the card, using the
   `previousCount`/`newCount` those methods already return.
@@ -168,7 +168,7 @@ Everything past the inbounders operates on `Message`/`IncomingCommand`
 test-only no-op platform (see `03-commands.md`'s testing section) — never
 used for a real inbound message. A user's identity is unified across
 platforms via `linked_accounts` (`platform`, `platformId`) → one `users.id`;
-`/link` (`packages/commandeer/commands/all/link.main.ts`) merges two
+`/link` (`packages/commandeer/commands/main/link.ts`) merges two
 platform identities into one account.
 
 Command handlers should read `ctx.message.platform` only when a behavior

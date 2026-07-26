@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { CardsDB } from "@girae/database/cards";
 import type { CommandArgumentSpec } from "@girae/common/commands";
 import { resolveCommandArguments } from "../../services/commandArguments";
-import WlcatCommand from "../../commands/all/wlcat.cards";
+import WlcatCommand from "../../commands/cards/wlcat";
 
 mockTelegram();
 

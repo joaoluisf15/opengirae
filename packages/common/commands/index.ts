@@ -10,6 +10,7 @@ interface CommandInfo {
   // Discord only: acks the interaction as ephemeral (visible only to the invoking user).
   ephemeral?: boolean;
   discordEntrypointName?: string;
+  guards?: string[];
 }
 
 export class Command {

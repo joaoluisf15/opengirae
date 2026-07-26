@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { parseQuantity } from "../../commands/all/girarauto.cards";
+import { parseQuantity } from "../../commands/cards/girarauto";
 
 describe("girarauto's parseQuantity", () => {
   test("a plain positive integer parses as itself", () => {

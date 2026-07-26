@@ -5,7 +5,7 @@ import { db } from "@girae/database/index";
 import { cardCustomizationSubmissions } from "@girae/database/schemas/cards";
 import { auditLogs } from "@girae/database/schemas/audit";
 import { eq } from "drizzle-orm";
-import UploadCommand from "../../commands/all/upload.cards";
+import UploadCommand from "../../commands/cards/upload";
 
 const mock = mockTelegram();
 

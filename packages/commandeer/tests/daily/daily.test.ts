@@ -5,7 +5,7 @@ import { users } from "@girae/database/schemas/users";
 import { UsersDB } from "@girae/database/users";
 import { EconomyDB } from "@girae/database/economy";
 import { eq } from "drizzle-orm";
-import DailyCommand from "../../commands/all/daily.main";
+import DailyCommand from "../../commands/main/daily";
 
 mockTelegram();
 

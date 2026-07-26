@@ -3,7 +3,7 @@ import { mockTelegram, bootstrapCommandeerWorkers, fakeCtx, TestFixtures } from 
 import { db } from "@girae/database/index";
 import { trades } from "@girae/database/schemas/cards";
 import { eq } from "drizzle-orm";
-import HtrocaCommand from "../../commands/isAdmin/htroca.admin";
+import HtrocaCommand from "../../commands/admin/htroca";
 
 mockTelegram();
 

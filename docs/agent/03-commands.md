@@ -3,14 +3,18 @@
 ## Anatomy
 
 ```
-packages/commandeer/commands/<guards>/<name>.<category>.ts
+packages/commandeer/commands/<category>/<name>.ts
 ```
 
-- **Filename drives dispatch.** `<guards>` is the directory name, split on
-  `+` into guard names (`all` = no guard, `isAdmin` = staff-only). `<name>`
-  becomes the registered command name; `<category>` is free-form metadata
-  only (`cards`, `users`, `vanity`, `admin`, `main`, `misc`) — doesn't affect
-  routing. See `packages/commandeer/loaders/commands.ts`.
+- **The top-level folder is the command's category** (`cards`, `vanity`,
+  `users`, `admin`, `main`, `misc`, `discoteca`) — recorded by the loader,
+  but still just organizational, the same as the old filename suffix was.
+  Nest further folders underneath purely for your own organization (e.g.
+  `cards/viewers/cts.ts`) — `Loadable.importAll`
+  (`packages/commandeer/loaders/base.ts`) recurses through arbitrary depth
+  and only the first path segment (the category) means anything to the
+  loader. `<name>` (the filename minus `.ts`) becomes the registered command
+  name. See `packages/commandeer/loaders/commands.ts`.
 - Every command file `export default class X extends Command` (from
   `@girae/common/commands`), with:
   ```ts
@@ -22,16 +26,20 @@ packages/commandeer/commands/<guards>/<name>.<category>.ts
                                             // failed @CommandArgument resolution
     aliases: ['wishlist', 'wl'],           // optional
     useWorkflow: true,                     // optional, see 04-dbos.md
+    guards: ['isAdmin'],                   // optional, see Guards below
   }
   static override async execute(ctx: IncomingCommand, args?) { ... }
   ```
   Set `usage` on every command, not just ones with a literal `Uso:` string —
   it's the automatic fallback message.
-- **Guards**: `packages/commandeer/services/guards.ts`. `isAdmin` and
-  `isSpecial` (checks `users.specialUser`) are registered; an unregistered
-  guard name (e.g. `all`) is a silent no-op. Add a new guard function there,
-  not per-command. Note: `isAdmin` also auto-passes for one hardcoded staff
-  group chat ID — check the guard's source before assuming every admin
+- **Guards**: declared per-command via `info.guards` (an array of guard
+  names, e.g. `guards: ['isAdmin']`) — no field, or an empty array, means
+  public. `packages/commandeer/services/guards.ts` holds the actual guard
+  functions; `isAdmin` and `isSpecial` (checks `users.specialUser`) are
+  registered there, and an unregistered guard name is a silent no-op. Add a
+  new guard function there, not per-command. Note: `isAdmin` also
+  auto-passes for one hardcoded staff group chat ID — check the guard's
+  source before assuming every admin
   command requires `users.isAdmin`. **A failed guard never replies** —
   `services/commands.ts` just returns — which is exactly what a command that
   must not reveal its own existence to unauthorized users wants (`/doar`'s
@@ -44,7 +52,7 @@ packages/commandeer/commands/<guards>/<name>.<category>.ts
   `rodar`/`draw`. Match the existing tone rather than defaulting to
   corporate-sounding names.
 - **Subcommands**: `@Subcommand({ name, description, aliases?, isWorkflow? })`
-  on a static method (see `profile.users.ts`'s `emo`/`edit`/`privacidade`).
+  on a static method (see `users/profile.ts`'s `emo`/`edit`/`privacidade`).
   Dispatch strips the subcommand name from `ctx.args` before calling the
   handler. `@CommandArgument` stacks on a `@Subcommand` method exactly like
   it does on `execute`.
@@ -120,7 +128,7 @@ static async cardinfo(arg: string, clickerUserId: string): Promise<string> { ...
 
 Trigger via `{ text: '🧁', quickView: { handler: 'cardinfo', arg: String(id) } }`
 in a `MessageReply.buttons` entry. The handler can also mutate data (see
-`equip` in `comprar.vanity.ts`) as long as the write is instant and
+`equip` in `vanity/comprar.ts`) as long as the write is instant and
 idempotent-safe — no confirm step, unlike a purchase.
 
 **`@Page({ name, restricted? })`** — in-place pagination:
@@ -141,7 +149,7 @@ page 0's button row separately.
 
 Filters on top of pagination: `@girae/common/utilities/pageFilters`
 (`parseFilterArg`/`buildFilterArg`/`applyFilters`/`filterAdviceText`/
-`filterButtonsRow`) — see `clc.cards.ts` for the reference usage.
+`filterButtonsRow`) — see `cards/clc.ts` for the reference usage.
 
 ## Buttons that start a fresh command
 

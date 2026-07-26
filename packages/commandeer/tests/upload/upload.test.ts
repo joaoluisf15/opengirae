@@ -4,7 +4,7 @@ import { CardsDB } from "@girae/database/cards";
 import { db } from "@girae/database/index";
 import { cardCustomizationSubmissions } from "@girae/database/schemas/cards";
 import { eq } from "drizzle-orm";
-import UploadCommand from "../../commands/all/upload.cards";
+import UploadCommand from "../../commands/cards/upload";
 
 // answerer's `worker` is a process-wide singleton - mock unconditionally so this file can't
 // win the race and leave others talking to real Telegram.

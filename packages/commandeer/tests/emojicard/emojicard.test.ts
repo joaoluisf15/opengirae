@@ -1,7 +1,7 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { mockTelegram, fakeCtx, TestFixtures } from "@girae/tests";
 import { CardsDB } from "@girae/database/cards";
-import EmojicardCommand from "../../commands/all/emojicard.cards";
+import EmojicardCommand from "../../commands/cards/emojicard";
 
 mockTelegram();
 

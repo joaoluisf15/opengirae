@@ -1,4 +1,3 @@
-import { readdirSync } from "fs"
 import { join } from "path"
 import type { Command } from "@girae/common/commands"
 import { Loadable } from "./base"
@@ -29,15 +28,13 @@ class CommandsLoader extends Loadable {
 
   async init(): Promise<void> {
     const commandPath = join(__dirname, "..", "commands")
+    const entries = await this.importAll(commandPath)
 
-    this.commands = (await Promise.all(readdirSync(commandPath).map(async guardRaw => {
-      const guards = guardRaw.split("+")
-      const entries = await this.importAll(join(commandPath, guardRaw))
-      return entries.map(({ file, module }) => {
-        const [, category] = file.split(".")
-        return { module: module as typeof Command, category, guards } as LoadedCommand
-      })
-    }))).flat()
+    this.commands = entries.map(({ file, module }) => {
+      const category = file.split(/[\\/]/)[0]!
+      const guards = ((module as any).info?.guards as string[] | undefined) ?? []
+      return { module: module as typeof Command, category, guards } as LoadedCommand
+    })
 
     for (const cmd of this.commands) {
       const registeredQuickViews = (cmd.module as any).quickViews as Record<string, { methodName: string }> | undefined

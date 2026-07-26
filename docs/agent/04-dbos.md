@@ -31,7 +31,7 @@ it "waits" for a click — the wait can legitimately last hours or days, and
 Redis TTL, so a workflow parked on `DBOS.recv()` that long would have its
 buttons silently stop working while the workflow itself is still technically
 suspended forever. `/upload`'s cativeiro-customization review
-(`packages/commandeer/commands/all/upload.cards.ts`) is the concrete
+(`packages/commandeer/commands/cards/upload.ts`) is the concrete
 pattern: a real DB table (`cardCustomizationSubmissions`) holds a
 `status: pending/approved/rejected`, its own row is the durable state (not a
 workflow variable), and Approve/Reject are ordinary `@QuickView` handlers —
@@ -209,7 +209,7 @@ primitive would just fail silently anyway. Instead:
 1. Post a **URL button** to `https://t.me/{botUsername}?start=<payload>`
    (`getBotUsername()`, `packages/commandeer/services/botInfo.ts`).
 2. Clicking it opens a private chat and sends `/start <payload>` **as that
-   user** — this is what legitimizes everything after. `start.main.ts`
+   user** — this is what legitimizes everything after. `main/start.ts`
    dispatches on the payload; extend it for a new deep-link need rather than
    creating a second `/start`-like command.
 3. From inside a running workflow that only knows the *original* chat,
