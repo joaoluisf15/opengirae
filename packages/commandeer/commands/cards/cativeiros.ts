@@ -4,6 +4,8 @@ import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
 import type { IncomingCommand } from '@girae/common/commands/types'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
+import { generateWishlistImage } from '@girae/common/ditto'
+import { cativeiroEmoji } from '../../constants'
 
 const PAGE_SIZE = 10
 
@@ -18,15 +20,16 @@ export async function renderPage(viewerUserIdArg: string, page: number) {
   if (total === 0) {
     return {
       content: '😊 Você não tem nenhuma carta elegível para cativeiro ainda. Use /girar ou troque cartas no @chatdagirae!',
+      photoUrl: undefined,
       hasNext: false,
       totalPages: 1,
     }
   }
 
   const cardLines = rows.map(c => {
-    const subEmoji = c.subcategoryEmoji ? `${c.subcategoryEmoji} ` : ''
     const rarityOrCustom = c.customEmoji ?? c.rarityEmoji
-    return `${subEmoji}${rarityOrCustom} \`${c.id}\`. **${escapeMarkdown(c.name)}** (\`${c.ownedCount}x\`)`
+    const subLabel = c.subcategoryName ? ` ${cativeiroEmoji(c.ownedCount)} — _${escapeMarkdown(c.subcategoryName)}_` : ''
+    return `${rarityOrCustom} \`${c.id}\`. **${escapeMarkdown(c.name)}** \`${c.ownedCount}x\`${subLabel}`
   }).join('\n')
   const pageInfo = totalPages > 1 ? `\n\n📃 Página \`${page + 1}\` de **${totalPages}**` : ''
   const cativeiroLabel = total === 1 ? 'cativeiro ativo' : 'cativeiros ativos'
@@ -38,7 +41,12 @@ ${cardLines}
 
 Use \`/upload id\`.${pageInfo}`
 
-  return { content, hasNext: page < totalPages - 1, totalPages }
+  const dittoCards = rows
+    .map(c => ({ id: c.id, name: c.name, imageUrl: c.customMediaUrl ?? c.imageUrl }))
+    .filter((c): c is { id: number; name: string; imageUrl: string } => !!c.imageUrl)
+  const image = dittoCards.length > 0 ? await generateWishlistImage(dittoCards) : null
+
+  return { content, photoUrl: image?.url, hasNext: page < totalPages - 1, totalPages }
 }
 
 export default class CativeirosCommand extends Command {
@@ -56,7 +64,7 @@ export default class CativeirosCommand extends Command {
     if (!page) return
 
     const navRow = pageNavRow('cativeiros', String(viewer.id), 0, page.hasNext, page.totalPages)
-    await reply(ctx, { content: page.content, buttonRows: navRow.length ? [navRow] : undefined })
+    await reply(ctx, { content: page.content, photoUrl: page.photoUrl, buttonRows: navRow.length ? [navRow] : undefined })
   }
 
   @Page({ name: 'cativeiros', restricted: true })

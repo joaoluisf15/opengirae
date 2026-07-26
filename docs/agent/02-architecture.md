@@ -156,6 +156,8 @@ Not just a BullMQ backend — also used directly for:
 |---|---|---|
 | **S3-compatible storage** (`packages/commandeer/services/storage.ts`, `Bun.S3Client`) | Re-hosting Telegram avatar photos, uploading card/vanity/generated images | Upload calls throw/reject; callers already treat a missing image as "render without a photo," nothing crashes command logic |
 | **Ditto** (`packages/common/ditto.ts`, `DITTO_URL`) | Generating the actual profile/card/trade/wishlist preview images shown in replies | Every Ditto call (`generateProfileImage`, etc.) returns `null` immediately if `DITTO_URL` is unset — no network call attempted |
+
+`generateWishlistImage`/`DittoWishlistCard.imageUrl` accepts a cativeiro custom **video** URL directly, same as a photo URL — Ditto derives the preview frame on its side. Don't add local video-frame-extraction (ffmpeg etc.) for this; there's no such utility in this codebase and none is needed. This is what `/cativeiros` and `/perfil`'s favorite-card image (`packages/common/profileData.ts`) both rely on to show a user's cativeiro customization (`userCards.customMediaUrl`, preferred over the card's default `imageUrl` when set) whether it's a photo or a video.
 | **Mistral** (`packages/common/mistral.ts`, `@mistralai/mistralai`) | `/addcard`'s AI-assisted field inference from a photo | Inference calls fail; the addcard wizard still works, just without auto-filled suggestions |
 | **OIDC** (website admin login only, `better-auth` + `genericOAuth` plugin) | Staff login to `/admin` | Not relevant to bot commands at all — regular bot users never touch this |
 | **Plausible** (website only) | Basic pageview analytics on the Mini App/admin site | Not relevant to bot commands; worth knowing about if asked what user data is collected |

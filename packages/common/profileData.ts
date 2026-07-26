@@ -17,8 +17,9 @@ export async function buildProfileData(
   const equippedIds = [profile.equipedBackgroundId, profile.equipedStickerId, profile.equipedProfileId]
     .filter((id): id is number => id != null)
 
-  const [favoriteCard, vanities, cardsCount] = await Promise.all([
+  const [favoriteCard, favoriteUserCard, vanities, cardsCount] = await Promise.all([
     user.favoriteCardId ? CardsDB.getCardWithDetails(user.favoriteCardId) : null,
+    user.favoriteCardId ? CardsDB.getUserCard(user.id, user.favoriteCardId) : null,
     VanitiesDB.getStoreItemsByIds(equippedIds),
     CardsDB.getUserCardsCount(user.id)
   ])
@@ -40,8 +41,9 @@ export async function buildProfileData(
     stickerURL: overrides?.stickerURL ?? sticker?.itemURL,
     profileFrameURL: profileFrame?.itemURL,
     favoriteCardName: favoriteCard?.name,
-    favoriteCardImageURL: favoriteCard?.imageUrl ?? undefined,
+    favoriteCardImageURL: favoriteUserCard?.customMediaUrl ?? favoriteCard?.imageUrl ?? undefined,
     favoriteCardRarity: favoriteCard?.rarityName,
+    favoriteCardEmoji: favoriteUserCard?.customEmoji ?? undefined,
     favoriteCardColor: (overrides?.favoriteCardColor !== undefined ? overrides.favoriteCardColor : profile.favoriteCardColor) ?? undefined,
     totalCards: cardsCount,
     hideEmojis: overrides?.hideEmojis ?? profile.hideProfileEmojis,

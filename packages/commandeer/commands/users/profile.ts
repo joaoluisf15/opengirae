@@ -48,7 +48,7 @@ export default class ProfileCommand extends Command {
     const image = profileData ? await generateProfileImage(profileData) : null
 
     const favCardText = favoriteCard
-      ? `\n\n${favoriteCard.rarityEmoji} \`${favoriteCard.id}\`. **${escapeMarkdown(favoriteCard.name)}**\n${favoriteCard.categoryEmoji ?? ''} _${escapeMarkdown(favoriteCard.subcategoryName ?? '')}_`
+      ? `\n\n${profileData?.favoriteCardEmoji ?? favoriteCard.rarityEmoji} \`${favoriteCard.id}\`. **${escapeMarkdown(favoriteCard.name)}**\n${favoriteCard.categoryEmoji ?? ''} _${escapeMarkdown(favoriteCard.subcategoryName ?? '')}_`
       : ''
 
     const drawsLeft = user.maxDraws - user.usedDraws
