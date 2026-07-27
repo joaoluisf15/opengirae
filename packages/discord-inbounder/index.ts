@@ -4,7 +4,7 @@ import { processCallback } from '@girae/common/inbound/callback'
 import { commandQueue } from '@girae/common/queue'
 import { info, error } from '@girae/common/logger'
 import { startHealthServer } from '@girae/common/health'
-import { buildApplicationCommands, findArgumentSpec, searchChoicesFor } from './registerCommands'
+import { buildApplicationCommands, findArgumentSpec, searchChoicesFor, fromDiscordSubcommandName } from './registerCommands'
 import { UsersDB } from '@girae/database/users'
 import { findCommand } from '@girae/commandeer/loaders/commands'
 
@@ -117,7 +117,7 @@ const bot = createBot({
 
         const { subcommandName, options } = unwrapSubcommand(interaction.data.options)
         const isEntrypoint = subcommandName && subcommandName === commandModule?.info.discordEntrypointName
-        const args = [...(subcommandName && !isEntrypoint ? [subcommandName] : []), ...options.map(o => String(o.value ?? ''))]
+        const args = [...(subcommandName && !isEntrypoint ? [fromDiscordSubcommandName(subcommandName)] : []), ...options.map(o => String(o.value ?? ''))]
 
         const message: Message = {
           id: String(placeholder.id),

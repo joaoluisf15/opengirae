@@ -32,6 +32,11 @@ const OPTION_OVERRIDES: Record<string, DiscordOption[]> = {
 
 const toOptionName = (name: string) => name.replace(/([A-Z])/g, '_$1').toLowerCase()
 
+const SUBCOMMAND_NAME_OVERRIDES: Record<string, string> = { '*': 'tudo' }
+const SUBCOMMAND_NAME_REVERSE: Record<string, string> = Object.fromEntries(Object.entries(SUBCOMMAND_NAME_OVERRIDES).map(([k, v]) => [v, k]))
+const toDiscordSubcommandName = (name: string) => SUBCOMMAND_NAME_OVERRIDES[name] ?? name
+export const fromDiscordSubcommandName = (name: string) => SUBCOMMAND_NAME_REVERSE[name] ?? name
+
 function mapSpecsToOptions(specs: CommandArgumentSpec[] | undefined): DiscordOption[] | undefined {
   if (!specs?.length) return undefined
   return specs.map(spec => ({
@@ -60,7 +65,7 @@ function optionsFor(commandName: string, module: any): DiscordOption[] | undefin
     const entrypoint = entrypointSubcommand(module)
     if (entrypoint) unique.unshift(entrypoint)
     return unique.map(entry => ({
-      name: entry.name,
+      name: toDiscordSubcommandName(entry.name),
       description: entry.description,
       type: ApplicationCommandOptionTypes.SubCommand,
       options: mapSpecsToOptions(module.commandArguments?.[entry.methodName]),
@@ -76,7 +81,7 @@ export function findArgumentSpec(commandName: string, discordOptionName: string,
   const module = cmd.module as any
   const methodName = !subcommandName || subcommandName === module.info?.discordEntrypointName
     ? 'execute'
-    : module.subcommands?.[subcommandName]?.methodName
+    : module.subcommands?.[fromDiscordSubcommandName(subcommandName)]?.methodName
   if (!methodName) return undefined
   const specs: CommandArgumentSpec[] | undefined = module.commandArguments?.[methodName]
   return specs?.find(spec => toOptionName(spec.name) === discordOptionName)
@@ -109,7 +114,7 @@ export function buildApplicationCommands(): CreateApplicationCommand[] {
   const commands: CreateApplicationCommand[] = []
 
   for (const { module, guards } of listCommands()) {
-    if (!guards.includes('all')) continue // staff-only commands stay out of the public slash-command list
+    if (guards.length > 0) continue // staff-only commands stay out of the public slash-command list
 
     const info = module.info
     if (info.name === 'unimplemented') continue
