@@ -35,9 +35,13 @@ export type ParseOutcome =
   | { ok: true; value: unknown }
   | { ok: false; message?: string }
 
+function parseStrictId(raw: string): number | undefined {
+  return /^-?\d+$/.test(raw) ? parseInt(raw, 10) : undefined
+}
+
 function parseNumber(raw: string): ParseOutcome {
-  const n = parseInt(raw, 10)
-  return isNaN(n) ? { ok: false } : { ok: true, value: n }
+  const n = parseStrictId(raw)
+  return n === undefined ? { ok: false } : { ok: true, value: n }
 }
 
 const AMBIGUOUS_RESULTS_SHOWN = 15
@@ -63,8 +67,8 @@ export async function resolveCategoryByIdOrName(raw: string): Promise<ParseOutco
 }
 
 async function parseCard(raw: string): Promise<ParseOutcome> {
-  const asId = parseInt(raw, 10)
-  if (!isNaN(asId)) {
+  const asId = parseStrictId(raw)
+  if (asId !== undefined) {
     const card = await CardsDB.getCardWithDetails(asId)
     return card ? { ok: true, value: card } : { ok: false, message: 'Não encontrei um personagem com esse ID.' }
   }
@@ -87,8 +91,8 @@ async function categoryNotFoundMessage(): Promise<string> {
 }
 
 async function parseCategory(raw: string): Promise<ParseOutcome> {
-  const asId = parseInt(raw, 10)
-  if (!isNaN(asId)) {
+  const asId = parseStrictId(raw)
+  if (asId !== undefined) {
     const category = await CardsDB.getCategory(asId)
     return category ? { ok: true, value: category } : { ok: false, message: await categoryNotFoundMessage() }
   }
@@ -110,8 +114,8 @@ async function parseCategory(raw: string): Promise<ParseOutcome> {
 
 async function parseVanityItem(raw: string, vanityType: 'background' | 'sticker', showBasePrice?: boolean): Promise<ParseOutcome> {
   const label = TYPE_LABEL[vanityType]
-  const asId = parseInt(raw, 10)
-  if (!isNaN(asId)) {
+  const asId = parseStrictId(raw)
+  if (asId !== undefined) {
     const item = await VanitiesDB.getStoreItemById(asId)
     return (item && item.type === vanityType) ? { ok: true, value: item } : { ok: false, message: `Não encontrei um ${label} com esse ID.` }
   }
@@ -148,8 +152,8 @@ function parseBoolean(raw: string): ParseOutcome {
 }
 
 async function parseSubcategory(raw: string): Promise<ParseOutcome> {
-  const asId = parseInt(raw, 10)
-  if (!isNaN(asId)) {
+  const asId = parseStrictId(raw)
+  if (asId !== undefined) {
     const subcategory = await CardsDB.getSubcategory(asId)
     return subcategory ? { ok: true, value: subcategory } : { ok: false, message: 'Não encontrei uma subcategoria com esse ID.' }
   }

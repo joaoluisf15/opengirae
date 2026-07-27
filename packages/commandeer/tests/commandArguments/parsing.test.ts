@@ -116,13 +116,10 @@ describe("parseCommandArguments - NUMBER/STRING (no DB, no I/O)", () => {
     expect(result.ok).toBe(false);
   });
 
-  // Documents existing loose parseInt semantics (every hand-rolled command already
-  // relied on isNaN(parseInt(x, 10)), not a stricter integer regex) - not a bug,
-  // just worth pinning down so a future "let's tighten NUMBER" change is deliberate.
-  test("NUMBER uses parseInt's loose semantics - leading digits win, trailing junk is dropped", async () => {
+  test("NUMBER rejects trailing junk instead of silently truncating", async () => {
     const specs: CommandArgumentSpec[] = [{ name: 'id', type: CommandArgumentType.NUMBER }];
     const result = await parseCommandArguments(specs, ['12abc'], fakeCtx([]));
-    expect(result).toEqual({ ok: true, values: { id: 12 } });
+    expect(result.ok).toBe(false);
   });
 
   test("guard failing rejects an otherwise-valid value", async () => {
@@ -459,6 +456,13 @@ describe("SUBCATEGORY resolution success paths (parseSubcategory, via resolveSub
   test("a name nobody has ever used gets the by-name not-found message", async () => {
     const result = await resolveSubcategoryByIdOrName('zzzznonexistentsubcategoryzzzz');
     expect(result).toEqual({ ok: false, message: 'Não encontrei uma subcategoria com esse nome.' });
+  });
+
+  // "/clc 2ne1" was resolving to subcategory ID 2 instead of searching by name, because
+  // parseInt("2ne1", 10) === 2 - it stops at the first non-digit instead of rejecting the string.
+  test("a name starting with digits (e.g. '2ne1') is treated as a name search, not truncated to a numeric ID", async () => {
+    const digitPrefixed = await resolveSubcategoryByIdOrName(`${uniqueId}zzz-not-a-real-name`);
+    expect(digitPrefixed).toEqual({ ok: false, message: 'Não encontrei uma subcategoria com esse nome.' });
   });
 });
 
