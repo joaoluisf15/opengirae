@@ -466,6 +466,30 @@ describe("SUBCATEGORY resolution success paths (parseSubcategory, via resolveSub
   });
 });
 
+describe("parseCommandArguments - EMOJI", () => {
+  const specs: CommandArgumentSpec[] = [{ name: 'emoji', type: CommandArgumentType.EMOJI }];
+
+  test("accepts a plain emoji", async () => {
+    const result = await parseCommandArguments(specs, ['🎉'], fakeCtx([]));
+    expect(result).toEqual({ ok: true, values: { emoji: '🎉' } });
+  });
+
+  test("accepts telegram-inbound's wire-format tag and converts it to the stored tag format", async () => {
+    const result = await parseCommandArguments(specs, ['<tg-emoji:5938251736551526545>🎉</tg-emoji>'], fakeCtx([]));
+    expect(result).toEqual({ ok: true, values: { emoji: '<tg-emoji emoji-id="5938251736551526545">🎉</tg-emoji>' } });
+  });
+
+  test("rejects plain text that isn't an emoji", async () => {
+    const result = await parseCommandArguments(specs, ['not-an-emoji'], fakeCtx([]));
+    expect(result).toEqual({ ok: false, message: '🤔 Manda um emoji de verdade, por favor.' });
+  });
+
+  test("rejects a malformed tag", async () => {
+    const result = await parseCommandArguments(specs, ['<tg-emoji:abc>🎉</tg-emoji>'], fakeCtx([]));
+    expect(result.ok).toBe(false);
+  });
+});
+
 describe("resolveCommandArguments (shell)", () => {
   test("success returns the resolved values without sending any reply", async () => {
     const specs: CommandArgumentSpec[] = [{ name: 'id', type: CommandArgumentType.NUMBER }];

@@ -38,10 +38,6 @@ describe("validateCustomEmoji", () => {
     expect(validateCustomEmoji('💎')).toBe(true);
   });
 
-  test("rejects plain text with a friendly message", () => {
-    expect(validateCustomEmoji('hello')).toContain('emoji de verdade');
-  });
-
   test.each(['🥉', '🥈', '🥇'])("rejects the bot's own rarity marker %s with a friendly message", (emoji) => {
     expect(validateCustomEmoji(emoji)).toContain('raridade das cartas');
   });

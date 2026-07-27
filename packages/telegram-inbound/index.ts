@@ -8,6 +8,7 @@ import { commandQueue, responseQueue, rawClient } from '@girae/common/queue'
 import { refreshAvatar } from '@girae/common/avatarRefresh'
 import { startHealthServer } from '@girae/common/health'
 import { buildReplyTo, resolveMedia } from './replyTo'
+import { withCustomEmojiTags } from './customEmoji'
 
 const tg = new TelegramClient(process.env.TELEGRAM_TOKEN!)
 
@@ -41,7 +42,7 @@ const CARDIMG_FROM_CAPTION_CHAT_IDS = [['-1003993142790', '46522']]
 const isLocalDevelopment = !!process.env.LOCAL_DEVELOPMENT
 
 tg.on('message', async (msg) => {
-  let content = msg.content ?? msg.caption
+  let content = withCustomEmojiTags(msg.content, msg.entities) ?? withCustomEmojiTags(msg.caption, msg.captionEntities)
 
   // a gif is msg.animation, not msg.photo - must count here too
   const hasMedia = !!msg.photo?.length || !!msg.animation

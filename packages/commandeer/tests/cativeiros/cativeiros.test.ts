@@ -33,7 +33,7 @@ describe("/cativeiros", () => {
     });
 
     test("no tutorial text, just the list and a short 'Use /upload id.' footer", async () => {
-      const page = await renderPage(String(viewerId), 0);
+      const page = await renderPage(String(viewerId), 0, 'telegram');
       expect(page?.content).toContain(`👤 \`${viewerId}\`. Cativeiros de **Test Cativeiros**`);
       expect(page?.content).toContain('Use `/upload id`.');
       expect(page?.content).not.toContain('quotando um vídeo/foto');
@@ -41,7 +41,7 @@ describe("/cativeiros", () => {
     });
 
     test("singular wording with exactly one eligible card", async () => {
-      const page = await renderPage(String(viewerId), 0);
+      const page = await renderPage(String(viewerId), 0, 'telegram');
       expect(page?.content).toContain('👑 `1` cativeiro ativo.');
       expect(page?.content).not.toContain('cativeiros ativos');
     });
@@ -51,12 +51,12 @@ describe("/cativeiros", () => {
       const secondCardId = (await fx.card({ name: "Kero", rarityId: secondRarityId })).id;
       await fx.ownCard(viewerId, secondCardId, 5);
 
-      const page = await renderPage(String(viewerId), 0);
+      const page = await renderPage(String(viewerId), 0, 'telegram');
       expect(page?.content).toContain('👑 `2` cativeiros ativos.');
     });
 
     test("shows the rarity emoji when no custom emoji is set", async () => {
-      const page = await renderPage(String(viewerId), 0);
+      const page = await renderPage(String(viewerId), 0, 'telegram');
       expect(page?.content).toContain(`🥇 \`${cardId}\`. **Clow Reed** \`5x\``);
     });
 
@@ -64,7 +64,7 @@ describe("/cativeiros", () => {
       const { CardsDB } = await import("@girae/database/cards");
       await CardsDB.setUserCardCustomEmoji(viewerId, cardId, '💎');
 
-      const page = await renderPage(String(viewerId), 0);
+      const page = await renderPage(String(viewerId), 0, 'telegram');
       expect(page?.content).toContain(`💎 \`${cardId}\`. **Clow Reed** \`5x\``);
       expect(page?.content).not.toContain('🥇');
     });
@@ -76,7 +76,7 @@ describe("/cativeiros", () => {
       const taggedCardId = (await fx.card({ name: "Sakura", rarityId: taggedRarityId, subcategoryId: subcategory.id })).id;
       await fx.ownCard(viewerId, taggedCardId, 5);
 
-      const page = await renderPage(String(viewerId), 0);
+      const page = await renderPage(String(viewerId), 0, 'telegram');
       expect(page?.content).toContain(`🥉 \`${taggedCardId}\`. **Sakura** \`5x\` ✨ — _CLAMP_`);
     });
   });

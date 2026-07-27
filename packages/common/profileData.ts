@@ -3,6 +3,7 @@ import { CardsDB } from '@girae/database/cards'
 import { VanitiesDB } from '@girae/database/vanities'
 import { DEFAULT_BACKGROUND_URL, type DittoProfileData } from './ditto'
 import { DEFAULT_AVATAR_URL } from '@girae/database/constants'
+import { resolveDisplayEmoji } from './utilities/customEmoji'
 
 export async function buildProfileData(
   platform: 'telegram' | 'discord',
@@ -43,7 +44,7 @@ export async function buildProfileData(
     favoriteCardName: favoriteCard?.name,
     favoriteCardImageURL: favoriteUserCard?.customMediaUrl ?? favoriteCard?.imageUrl ?? undefined,
     favoriteCardRarity: favoriteCard?.rarityName,
-    favoriteCardEmoji: favoriteUserCard?.customEmoji ?? undefined,
+    favoriteCardEmoji: resolveDisplayEmoji(favoriteUserCard?.customEmoji, undefined, false),
     favoriteCardColor: (overrides?.favoriteCardColor !== undefined ? overrides.favoriteCardColor : profile.favoriteCardColor) ?? undefined,
     totalCards: cardsCount,
     hideEmojis: overrides?.hideEmojis ?? profile.hideProfileEmojis,

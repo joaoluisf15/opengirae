@@ -8,6 +8,7 @@ export enum CommandArgumentType {
   STRING = 'STRING',
   HEX_COLOR = 'HEX_COLOR',
   BOOLEAN = 'BOOLEAN',
+  EMOJI = 'EMOJI',
 }
 
 interface BaseCommandArgumentSpec<T = any> {

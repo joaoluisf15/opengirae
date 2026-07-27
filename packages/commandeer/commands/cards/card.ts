@@ -7,6 +7,7 @@ import type { IncomingCommand } from '@girae/common/commands/types'
 import { EMOJI, cativeiroEmoji } from '../../constants'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { mention } from '@girae/common/utilities/mention'
+import { resolveDisplayEmoji } from '@girae/common/utilities/customEmoji'
 
 type CardDetails = NonNullable<Awaited<ReturnType<typeof CardsDB.getCardWithDetails>>>
 
@@ -20,7 +21,7 @@ async function showCard(ctx: IncomingCommand, card: CardDetails) {
   ])
   const count = owned?.count ?? 0
   const badge = cativeiroEmoji(count)
-  const rarityOrCustom = owned?.customEmoji ?? card.rarityEmoji
+  const rarityOrCustom = resolveDisplayEmoji(owned?.customEmoji, card.rarityEmoji, ctx.message.platform === 'telegram')
 
   const subcategoryNames = [card.subcategoryName ?? '?', ...tags].map(escapeMarkdown).join(' / ')
   const countSuffix = count > 0 ? ` (\`${count}x\`)` : ''

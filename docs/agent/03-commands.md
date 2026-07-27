@@ -90,10 +90,12 @@ matching whichever `*DB` method that type resolves through)
   by ID; else fuzzy `ilike` search with 0/1/N-result handling —
   disambiguation list on N), `VANITY_ITEM` (same ID-or-fuzzy-name shape, but
   needs a fixed `vanityType: 'background' | 'sticker'` on the spec since
-  there's no single "any vanity item" lookup).
+  there's no single "any vanity item" lookup), `EMOJI` (a plain Unicode emoji,
+  or a `<tg-emoji emoji-id="...">...</tg-emoji>` tag — see "Telegram premium
+  custom emoji" below).
 - **Only the last spec is greedy** (joins every remaining token) — and only
   for `STRING`/`CARD`/`CATEGORY`/`SUBCATEGORY`/`VANITY_ITEM`.
-  `NUMBER`/`USER_MENTION`/`HEX_COLOR`/`BOOLEAN` always mean exactly one
+  `NUMBER`/`USER_MENTION`/`HEX_COLOR`/`BOOLEAN`/`EMOJI` always mean exactly one
   token. Every earlier spec eats exactly one token.
 - **`nullable: true`** — a missing token resolves to `undefined` instead of
   failing. Use for "browse everything" defaults (`/cat` with no args) and
@@ -111,6 +113,29 @@ matching whichever `*DB` method that type resolves through)
 - Resolver: `packages/commandeer/services/commandArguments.ts`, split into a
   pure core (`parseCommandArguments` — safe/fast to unit test directly) and a
   thin shell (`resolveCommandArguments`) that sends the reply on failure.
+
+### Telegram premium custom emoji
+
+A Telegram premium custom emoji doesn't arrive as a normal Unicode character —
+the raw message text only contains a fallback glyph at that position, with the
+actual custom emoji ID living in a separate `entities`/`caption_entities`
+array entry (`{ type: 'custom_emoji', offset, length, custom_emoji_id }`).
+Command code never touches that directly: `telegram-inbound/customEmoji.ts`'s
+`withCustomEmojiTags()` runs during inbound normalization (`telegram-inbound/index.ts`,
+right where `content`/`caption` get read) and rewrites the message text so
+every custom emoji becomes an inline `<tg-emoji emoji-id="...">fallback</tg-emoji>`
+tag — replacements are applied back-to-front by offset so earlier substitutions
+don't shift later ones. By the time a command sees `ctx.args`, any premium
+emoji is already this tag, as one contiguous token (no whitespace inside it).
+`CommandArgumentType.EMOJI` (`/emojicard`'s emoji arg) accepts either that tag
+or a plain Unicode emoji — see `parseEmoji` in `commandArguments.ts`. This is
+also why `/emojicard`'s custom-emoji string is stored in the DB exactly as
+this tag (not decoded further) — Telegram's Bot API natively understands
+`<tg-emoji>` in HTML-parse-mode messages, which is how every reply already
+gets sent, so no extra rendering work is needed there. **Not yet handled**:
+Discord has no equivalent, and nothing currently substitutes a plain fallback
+(👾 was proposed) for a `customEmoji` value that's a `<tg-emoji>` tag when
+rendering on Discord or anywhere else that can't display it.
 
 ## Stateless callbacks: `@QuickView` and `@Page`
 

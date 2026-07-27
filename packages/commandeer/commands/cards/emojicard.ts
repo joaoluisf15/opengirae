@@ -1,4 +1,4 @@
-import { Command, CommandArgument, CommandArgumentType } from '@girae/common/commands'
+import { Command, CommandArgument, CommandArgumentType, Subcommand } from '@girae/common/commands'
 import { reply } from '@girae/common/dbos/messaging'
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
@@ -17,7 +17,7 @@ export default class EmojicardCommand extends Command {
 
   @CommandArgument([
     { name: 'card', type: CommandArgumentType.CARD, guard: cativeiroEligibilityGuard },
-    { name: 'emoji', type: CommandArgumentType.STRING, guard: validateCustomEmoji },
+    { name: 'emoji', type: CommandArgumentType.EMOJI, guard: validateCustomEmoji },
   ])
   static override async execute(ctx: IncomingCommand, args: { card: CardDetails; emoji: string }) {
     const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
@@ -31,5 +31,20 @@ export default class EmojicardCommand extends Command {
     }
 
     await reply(ctx, `✨ Prontinho! Seu card agora aparece como ${emoji} \`${args.card.id}\`. **${escapeMarkdown(args.card.name)}**.`)
+  }
+
+  @Subcommand({ name: 'remover', description: 'Remove o emoji personalizado de um card' })
+  @CommandArgument([{ name: 'card', type: CommandArgumentType.CARD }])
+  static async remover(ctx: IncomingCommand, args: { card: CardDetails }) {
+    const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
+    if (!user) return
+
+    const result = await CardsDB.clearUserCardCustomEmoji(user.id, args.card.id)
+    if (!result.ok) {
+      await reply(ctx, `😅 Você não tem esse card.`)
+      return
+    }
+
+    await reply(ctx, `🧹 Prontinho! Removi o emoji personalizado de \`${args.card.id}\`. **${escapeMarkdown(args.card.name)}**.`)
   }
 }

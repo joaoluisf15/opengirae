@@ -5,6 +5,7 @@ import { UsersDB } from '@girae/database/users'
 import { RankDB, type RankEntry, type CativeiroRankEntry, type RankPosition } from '@girae/database/rank'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { mention } from '@girae/common/utilities/mention'
+import { resolveDisplayEmoji } from '@girae/common/utilities/customEmoji'
 
 const PAGE_SIZE = 10
 
@@ -48,7 +49,7 @@ async function renderPage(type: RankType, page: number, viewerTelegramId: string
     total = entries[0]?.total ?? 0
     position = pos
     rows = entries.map((e: CativeiroRankEntry, i: number) => {
-      const emoji = e.customEmoji ?? e.rarityEmoji
+      const emoji = resolveDisplayEmoji(e.customEmoji, e.rarityEmoji, platform === 'telegram')
       return `${marker(offset + i + 1)} ${nameFor(e, viewer.id, platform)} — \`${e.cardId}\`. ${emoji} _${escapeMarkdown(e.cardName)}_ \`x${e.count}\``
     })
   } else {

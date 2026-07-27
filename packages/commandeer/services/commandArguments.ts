@@ -8,6 +8,7 @@ import { EconomyDB } from '@girae/database/economy'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { normalizeText } from '@girae/common/utilities/normalizeText'
 import { TYPE_LABEL } from './vanity/vanityBrowser'
+import { isEmojiOnly } from './cards/cativeiro'
 
 const GREEDY_TYPES = new Set([
   CommandArgumentType.STRING,
@@ -144,6 +145,16 @@ function parseHexColor(raw: string): ParseOutcome {
 const TRUE_TOKENS = new Set(['yes', 'sim', '1', 'on', 'ativar'])
 const FALSE_TOKENS = new Set(['no', 'nao', 'não', '0', 'off', 'desativar'])
 
+const CUSTOM_EMOJI_WIRE_TAG_REGEX = /^<tg-emoji:(\d+)>(.+)<\/tg-emoji>$/
+
+function parseEmoji(raw: string): ParseOutcome {
+  const trimmed = raw.trim()
+  const wireMatch = trimmed.match(CUSTOM_EMOJI_WIRE_TAG_REGEX)
+  if (wireMatch) return { ok: true, value: `<tg-emoji emoji-id="${wireMatch[1]}">${wireMatch[2]}</tg-emoji>` }
+  if (isEmojiOnly(trimmed)) return { ok: true, value: trimmed }
+  return { ok: false, message: '🤔 Manda um emoji de verdade, por favor.' }
+}
+
 function parseBoolean(raw: string): ParseOutcome {
   const normalized = raw.toLowerCase()
   if (TRUE_TOKENS.has(normalized)) return { ok: true, value: true }
@@ -212,6 +223,7 @@ async function parseValue(spec: CommandArgumentSpec, raw: string | undefined, ct
     case CommandArgumentType.STRING: return { ok: true, value: raw }
     case CommandArgumentType.HEX_COLOR: return parseHexColor(raw)
     case CommandArgumentType.BOOLEAN: return parseBoolean(raw)
+    case CommandArgumentType.EMOJI: return parseEmoji(raw)
     case CommandArgumentType.CARD: return parseCard(raw)
     case CommandArgumentType.CATEGORY: return parseCategory(raw)
     case CommandArgumentType.SUBCATEGORY: return parseSubcategory(raw)

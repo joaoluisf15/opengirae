@@ -15,6 +15,7 @@ const OPTION_TYPE_MAP: Record<CommandArgumentType, ApplicationCommandOptionTypes
   [CommandArgumentType.NUMBER]: ApplicationCommandOptionTypes.Number,
   [CommandArgumentType.BOOLEAN]: ApplicationCommandOptionTypes.Boolean,
   [CommandArgumentType.USER_MENTION]: ApplicationCommandOptionTypes.User,
+  [CommandArgumentType.EMOJI]: ApplicationCommandOptionTypes.String,
 }
 
 const AUTOCOMPLETE_TYPES = new Set([

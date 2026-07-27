@@ -1075,6 +1075,15 @@ export class CardsDB {
     return updated ? { ok: true as const, row: updated } : { ok: false as const, reason: 'not_eligible' as const };
   })
 
+  static clearUserCardCustomEmoji = maybeTransaction('clearUserCardCustomEmoji', async (client, userId: number, cardId: number) => {
+    const [updated] = await client
+      .update(userCards)
+      .set({ customEmoji: null })
+      .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)))
+      .returning();
+    return updated ? { ok: true as const, row: updated } : { ok: false as const };
+  })
+
   static createCativeiroSubmission = async (userId: number, cardId: number, mediaUrl: string, mediaType: 'photo' | 'video', submitter: CativeiroSubmitter) => {
     try {
       return { ok: true as const, submission: await CardsDB.createCativeiroSubmissionTx(userId, cardId, mediaUrl, mediaType, submitter) };

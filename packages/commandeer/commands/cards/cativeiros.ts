@@ -6,10 +6,11 @@ import type { IncomingCommand } from '@girae/common/commands/types'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { generateWishlistImage } from '@girae/common/ditto'
 import { cativeiroEmoji } from '../../constants'
+import { resolveDisplayEmoji } from '@girae/common/utilities/customEmoji'
 
 const PAGE_SIZE = 10
 
-export async function renderPage(viewerUserIdArg: string, page: number) {
+export async function renderPage(viewerUserIdArg: string, page: number, platform: 'telegram' | 'discord') {
   const viewerId = parseInt(viewerUserIdArg, 10)
   const viewer = await UsersDB.getUserById(viewerId)
   if (!viewer) return null
@@ -27,7 +28,7 @@ export async function renderPage(viewerUserIdArg: string, page: number) {
   }
 
   const cardLines = rows.map(c => {
-    const rarityOrCustom = c.customEmoji ?? c.rarityEmoji
+    const rarityOrCustom = resolveDisplayEmoji(c.customEmoji, c.rarityEmoji, platform === 'telegram')
     const subLabel = c.subcategoryName ? ` ${cativeiroEmoji(c.ownedCount)} — _${escapeMarkdown(c.subcategoryName)}_` : ''
     return `${rarityOrCustom} \`${c.id}\`. **${escapeMarkdown(c.name)}** \`${c.ownedCount}x\`${subLabel}`
   }).join('\n')
@@ -60,7 +61,8 @@ export default class CativeirosCommand extends Command {
     const viewer = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
     if (!viewer) return
 
-    const page = await renderPage(String(viewer.id), 0)
+    const platform = ctx.message.platform as 'telegram' | 'discord'
+    const page = await renderPage(String(viewer.id), 0, platform)
     if (!page) return
 
     const navRow = pageNavRow('cativeiros', String(viewer.id), 0, page.hasNext, page.totalPages)
@@ -68,7 +70,7 @@ export default class CativeirosCommand extends Command {
   }
 
   @Page({ name: 'cativeiros', restricted: true })
-  static async cativeirosPage(arg: string, page: number) {
-    return renderPage(arg, page)
+  static async cativeirosPage(arg: string, page: number, _authorId: string, platform: 'telegram' | 'discord') {
+    return renderPage(arg, page, platform)
   }
 }
