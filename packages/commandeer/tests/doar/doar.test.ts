@@ -129,11 +129,16 @@ describe("/doar (and its alias /micar) donate cards as a one-sided trade", () =>
 
     const donorCountBefore = await ownedCount(donorId, cardBId);
     await fx.ownCard(donorId, cardBId, 1);
-    const ctx = fakeCtx({ name: 'doar', authorId: donorPlatformId, args: [String(cardBId)], platform: 'telegram' });
-    await expect(DoarCommand.execute(ctx, { target: bigRecipientPlatformId, cardsRaw: String(cardBId) })).resolves.toBeUndefined();
+    const workflowID = `test-doar-already-over-cap-${Bun.randomUUIDv7()}`;
+    const ctx = fakeCtx({ name: 'doar', authorId: donorPlatformId, args: [String(cardBId)], platform: 'telegram', workflowID });
+    const handle = await DBOS.startWorkflow(DoarCommand, { workflowID }).execute(ctx, { target: bigRecipientPlatformId, cardsRaw: String(cardBId) });
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: true }, 'doar:confirm');
+    await handle.getResult();
 
     expect(await ownedCount(donorId, cardBId)).toBe(donorCountBefore + 1);
-  });
+    expect(await ownedCount(bigRecipientId, cardBId)).toBe(0);
+  }, 10000);
 
   test("a TOCTOU race: the recipient crosses 1500 cards between the confirm prompt and the click", async () => {
     const growingRecipientPlatformId = "test-doar-growing-recipient";
@@ -158,7 +163,7 @@ describe("/doar (and its alias /micar) donate cards as a one-sided trade", () =>
 
     expect(await ownedCount(donorId, cardAId)).toBe(donorCountBefore + 1);
     expect(await ownedCount(growingRecipientId, cardAId)).toBe(0);
-  });
+  }, 10000);
 
   test("a TOCTOU race: donor loses the card between the confirm prompt and the click", async () => {
     await fx.ownCard(donorId, cardAId, 1);

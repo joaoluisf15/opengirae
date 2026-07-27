@@ -14,9 +14,9 @@ describe("CommandsLoader category/guards wiring after the folder reorg", () => {
     expect(cmd?.category).toBe("admin");
   });
 
-  test("doar carries the isSpecial guard and the cards category, even though it used to live in a different guard folder than its category folder", () => {
+  test("doar has no guards and the cards category, even though it used to live in a different guard folder than its category folder", () => {
     const cmd = findCommand("doar");
-    expect(cmd?.guards).toEqual(["isSpecial"]);
+    expect(cmd?.guards).toEqual([]);
     expect(cmd?.category).toBe("cards");
   });
 });

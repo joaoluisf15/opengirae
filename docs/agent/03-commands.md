@@ -42,9 +42,10 @@ packages/commandeer/commands/<category>/<name>.ts
   source before assuming every admin
   command requires `users.isAdmin`. **A failed guard never replies** —
   `services/commands.ts` just returns — which is exactly what a command that
-  must not reveal its own existence to unauthorized users wants (`/doar`'s
-  `isSpecial` gate relies on this: a non-special user typing `/doar` gets no
-  response at all, indistinguishable from a typo'd command name).
+  must not reveal its own existence to unauthorized users wants: a
+  non-passing user gets no response at all, indistinguishable from a
+  typo'd command name. `/doar` is public (no guard) — donations aren't
+  gated to special users.
 - **Aliases**: pick names that read naturally in Portuguese first (this bot's
   primary audience), with an English alias where it helps (`/wish` /
   `/wishlist`). Don't be shy about silly/casual aliases either — `/girar`'s
