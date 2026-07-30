@@ -1,0 +1,12 @@
+{
+  "name": "@girae/services",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@girae/common": "workspace:*",
+    "@girae/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@girae/tests": "workspace:*"
+  }
+}

@@ -1,5 +1,6 @@
 FROM oven/bun:1.3.14 AS base
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 COPY package.json bun.lock ./
@@ -8,6 +9,7 @@ COPY packages/commandeer/package.json packages/commandeer/package.json
 COPY packages/common/package.json packages/common/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/discord-inbounder/package.json packages/discord-inbounder/package.json
+COPY packages/services/package.json packages/services/package.json
 COPY packages/telegram-inbound/package.json packages/telegram-inbound/package.json
 COPY packages/tests/package.json packages/tests/package.json
 
