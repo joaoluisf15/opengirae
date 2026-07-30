@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { cards } from "./cards";
 import { storeItems } from "./vanities";
+import { discotecaEntries } from "./discoteca";
 
 export const users = pgTable("users", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -53,6 +54,8 @@ export const userProfiles = pgTable("user_profiles", {
   reputation: integer().notNull().default(0),
   favoriteColor: text().notNull().default("#FF94DB"),
   favoriteCardColor: text(),
+  favoriteDiscotecaId: integer().references(() => discotecaEntries.id),
+  lastFmUsername: text(),
 
   isMarried: boolean().notNull().default(false),
   partnerId: integer().references(() => users.id),

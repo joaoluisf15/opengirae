@@ -7,11 +7,12 @@ import * as schema_users from "./schemas/users";
 import * as schema_audit from "./schemas/audit";
 import * as schema_promo from "./schemas/promo";
 import * as schema_economy from "./schemas/economy";
+import * as schema_discoteca from "./schemas/discoteca";
 
 export const config = { connectionString: process.env.DATABASE_URL!, max: 15 };
 const pool = new Pool(config);
 
-const schema = { ...schema_cards, ...schema_users, ...schema_audit, ...schema_promo, ...schema_economy };
+const schema = { ...schema_cards, ...schema_users, ...schema_audit, ...schema_promo, ...schema_economy, ...schema_discoteca };
 
 export const db = drizzle(pool, { schema });
 export const dataSource = new DrizzleDataSource<NodePgDatabase<typeof schema>>('app-db', config);

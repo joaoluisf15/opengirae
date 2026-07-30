@@ -176,6 +176,13 @@
       "when": 1785041372789,
       "tag": "0024_youthful_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785436333221,
+      "tag": "0025_slimy_red_ghost",
+      "breakpoints": true
     }
   ]
 }

@@ -13,11 +13,13 @@ import { db } from "@girae/database/index";
 import { users, linkedAccounts, userProfiles } from "@girae/database/schemas/users";
 import { cards, categories, subcategories, cardSubcategories, rarities, userCards } from "@girae/database/schemas/cards";
 import { storeItems } from "@girae/database/schemas/vanities";
+import { discotecaGenres, discotecaEntries } from "@girae/database/schemas/discoteca";
 import { eq, and } from "drizzle-orm";
 import { UsersDB } from "@girae/database/users";
 import { CardsDB } from "@girae/database/cards";
 import { EconomyDB } from "@girae/database/economy";
 import { VanitiesDB } from "@girae/database/vanities";
+import { DiscotecaDB } from "@girae/database/discoteca";
 import type { Platform } from "@girae/common/commands/types";
 
 let cachedRarityId: number | undefined;
@@ -77,6 +79,34 @@ export class TestFixtures {
     const row = await CardsDB.createCategory(opts.name, opts.emoji);
     const id = row!.id;
     this.onCleanup(async () => { await db.delete(categories).where(eq(categories.id, id)); });
+    return { id };
+  }
+
+  async genre(opts: { name?: string; emoji?: string } = {}): Promise<{ id: number }> {
+    const name = opts.name ?? `Test Genre ${Bun.randomUUIDv7()}`;
+    const row = await DiscotecaDB.createGenre(name, opts.emoji ?? '🎵');
+    const id = row!.id;
+    this.onCleanup(async () => { await db.delete(discotecaGenres).where(eq(discotecaGenres.id, id)); });
+    return { id };
+  }
+
+  async discotecaEntry(opts: {
+    name?: string;
+    artistName?: string;
+    appleMusicId?: string;
+    type?: 'single' | 'album';
+    rarityId?: number;
+  } = {}): Promise<{ id: number }> {
+    const rarityId = opts.rarityId ?? await anyRarityId();
+    const row = await DiscotecaDB.createEntry({
+      name: opts.name ?? `Test Entry ${Bun.randomUUIDv7()}`,
+      artistName: opts.artistName ?? 'Test Artist',
+      appleMusicId: opts.appleMusicId ?? `test-apple-music-${Bun.randomUUIDv7()}`,
+      type: opts.type ?? 'single',
+      rarityId,
+    });
+    const id = row!.id;
+    this.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, id)); });
     return { id };
   }
 
