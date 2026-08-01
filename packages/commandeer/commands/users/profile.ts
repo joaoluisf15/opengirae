@@ -5,6 +5,7 @@ import { CardsDB } from '@girae/database/cards'
 import { DEFAULT_AVATAR_URL } from '@girae/database/constants'
 import type { IncomingCommand } from '@girae/common/commands/types'
 import { generateProfileImage } from '@girae/common/ditto'
+import { refreshAvatar } from '@girae/common/avatarRefresh'
 import { buildProfileData } from '@girae/common/profileData'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { tg } from '../../services/botInfo'
@@ -42,7 +43,8 @@ export default class ProfileCommand extends Command {
 
     const favoriteCard = user.favoriteCardId ? await CardsDB.getCardWithDetails(user.favoriteCardId) : null
 
-    const avatarUrl = user.avatarUrl || DEFAULT_AVATAR_URL
+    const refreshedUser = ctx.message.platform === 'telegram' ? await refreshAvatar(tg, targetTelegramId, user.displayName) : null
+    const avatarUrl = refreshedUser?.avatarUrl || user.avatarUrl || DEFAULT_AVATAR_URL
 
     const profileData = await buildProfileData(ctx.message.platform as 'telegram' | 'discord', targetTelegramId, { avatarURL: avatarUrl })
     const image = profileData ? await generateProfileImage(profileData) : null

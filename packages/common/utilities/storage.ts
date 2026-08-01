@@ -17,16 +17,17 @@ const EXT_MIME: Record<string, string> = {
   mp4: "video/mp4", webm: "video/webm",
 }
 
-function guessImageType(headerType: string | null, sourceUrl: string): { contentType: string, ext: string } {
+export function guessImageType(headerType: string | null, sourceUrl: string): { contentType: string, ext: string } {
   if (headerType?.startsWith("image/") || headerType?.startsWith("video/")) {
     return { contentType: headerType, ext: headerType.split("/")[1]!.split("+")[0]! }
   }
 
-  const urlExt = sourceUrl.split(/[?#]/)[0]!.split(".").pop()?.toLowerCase()
+  const filename = sourceUrl.split(/[?#]/)[0]!.split("/").pop() ?? ""
+  const urlExt = filename.includes(".") ? filename.split(".").pop()!.toLowerCase() : undefined
   const mime = urlExt ? EXT_MIME[urlExt] : undefined
   if (mime) return { contentType: mime, ext: urlExt! }
 
-  return { contentType: headerType ?? "application/octet-stream", ext: urlExt ?? "bin" }
+  return { contentType: headerType ?? "application/octet-stream", ext: "bin" }
 }
 
 export async function uploadFromUrl(sourceUrl: string, keyPrefix: string): Promise<string> {

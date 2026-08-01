@@ -8,6 +8,7 @@
     "@girae/answerer": "workspace:*",
     "@girae/common": "workspace:*",
     "@girae/database": "workspace:*",
+    "@girae/services": "workspace:*",
     "date-fns": "^4.4.0"
   },
   "devDependencies": {
