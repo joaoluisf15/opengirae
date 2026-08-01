@@ -9,6 +9,7 @@ COPY packages/common/package.json packages/common/package.json
 COPY packages/tests/package.json packages/tests/package.json
 COPY packages/answerer/package.json packages/answerer/package.json
 COPY packages/commandeer/package.json packages/commandeer/package.json
+COPY packages/services/package.json packages/services/package.json
 COPY website/package.json website/package.json
 
 RUN bun install
