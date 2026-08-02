@@ -67,13 +67,23 @@ cause; don't leave speculative logging behind "just in case."
   video than a static photo. Don't reintroduce a bare `isVideo` check for
   cativeiro classification without also handling `isAnimatedPhoto`.
 - **Telegram never includes a profile photo URL on inbound updates** — a
-  user's avatar is fetched separately (`tg.getUserProfilePhotos()`) and
-  throttled to once per 24h per user (`avatarUpdatedAt`) by
-  `refreshAvatarIfStale()`, which runs on every inbound message/callback.
-  **A brand-new user's row starts with `avatarUrl: ''`** until their first
-  inbound event — anything that needs a real avatar URL (Ditto image
-  generation, for instance) can fail outright for a user who's never
-  actually messaged/clicked anything yet.
+  user's avatar is fetched separately (`tg.getUserProfilePhotos()`, re-hosted
+  to our own CDN via `uploadFromUrl`) and throttled to once per hour per user
+  (`AVATAR_TTL_MS` in `packages/common/avatarRefresh.ts`, checked against
+  `avatarUpdatedAt`) by `refreshAvatarIfStale()`, which runs on every inbound
+  message/callback. **A brand-new user's row starts with `avatarUrl: ''`**
+  until their first inbound event — anything that needs a real avatar URL
+  (Ditto image generation, for instance) can fail outright for a user who's
+  never actually messaged/clicked anything yet.
+  Since that refresh only ever fires on the avatar *owner's* own activity, an
+  inactive user's cached URL can go stale/dead (Telegram's bot-file URLs
+  aren't permanent) with nothing to trigger a refresh — `/profile` hit this
+  in prod: viewing an inactive user's profile kept reusing their dead
+  `avatarUrl`, `sendPhoto` failed identically on all 3 retries, and the
+  command produced no reply at all. `profile.ts` now also calls
+  `refreshAvatar()` for the *viewed* user (not just the viewer) before
+  building the reply, so viewing someone's profile refreshes their avatar
+  too, not just their own messages.
 - **Reply-to-topic-anchor false negative**: Telegram auto-attaches
   `reply_to_message` pointing at a forum topic's own "X created the topic"
   service message for ordinary in-topic posts (so clients can tell which

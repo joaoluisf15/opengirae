@@ -38,6 +38,10 @@ export async function tagPreviewAudio(audioBytes: Uint8Array, artworkBytes: Uint
       ...(tags.albumName ? ['-metadata', `album=${tags.albumName}`] : []),
       ...(tags.releaseDate ? ['-metadata', `date=${tags.releaseDate}`] : []),
       ...(tags.genre ? ['-metadata', `genre=${tags.genre}`] : []),
+      // moves the moov atom (title/artist/cover-art) to the front - without this it lands after
+      // mdat, and Telegram's server (which reads a bounded prefix of remote URLs, not the whole
+      // file) never reaches it, so the sent audio shows no title, performer, or cover.
+      '-movflags', '+faststart',
       outputPath,
     );
 

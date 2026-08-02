@@ -57,9 +57,12 @@ export interface StoredStep {
 }
 
 export interface PendingResponse {
-  method: 'sendMessage' | 'sendPhoto' | 'sendAnimation' | 'sendVideo' | 'editMessageMedia' | 'editMessageCaption' | 'editMessageText' | 'deleteMessage' | 'answerCallbackQuery';
+  method: 'sendMessage' | 'sendPhoto' | 'sendAnimation' | 'sendVideo' | 'sendAudio' | 'editMessageMedia' | 'editMessageCaption' | 'editMessageText' | 'deleteMessage' | 'answerCallbackQuery';
   content?: string;
   photoUrl?: string;
+  audioUrl?: string;
+  audioPerformer?: string;
+  audioTitle?: string;
   replyToMessageId?: string;
   messageId?: string;
   callbackQueryId?: string;

@@ -242,6 +242,37 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
       })
       return msg.id
     }
+    case 'sendAudio': {
+      const audioUrl = response.audioUrl!
+      if (!isValidHttpUrl(audioUrl)) {
+        warn('answerer', `sendAudio received invalid URL, falling back to sendMessage: ${audioUrl}`)
+        const msg = await tg.sendMessage({
+          chatId: response.chatId,
+          messageThreadId: response.threadId,
+          text: formattedContent ?? '',
+          parseMode: 'HTML',
+          ...buildReplyParameters(response.replyToMessageId, false),
+          ...buildReplyMarkup(response.buttons)
+        })
+        return msg.id
+      }
+      // Telegram ignores `performer`/`title` (and reliably parsing embedded tags/cover) when `audio`
+      // is passed as a remote URL - only a real multipart upload gets proper inline playback metadata.
+      const audioRes = await fetch(audioUrl)
+      const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+      const msg = await tg.sendAudio({
+        chatId: response.chatId,
+        messageThreadId: response.threadId,
+        audio: audioBuffer,
+        caption: formattedContent,
+        parseMode: 'HTML',
+        performer: response.audioPerformer,
+        title: response.audioTitle,
+        ...buildReplyParameters(response.replyToMessageId, true),
+        ...buildReplyMarkup(response.buttons)
+      })
+      return msg.id
+    }
     case 'deleteMessage':
       await tg.deleteMessage(response.chatId,
         Number(response.messageId!))

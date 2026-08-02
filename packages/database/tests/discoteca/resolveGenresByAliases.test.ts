@@ -7,25 +7,48 @@ import { DiscotecaDB } from "../../discoteca";
 
 describe("DiscotecaDB.resolveGenresByAliases", () => {
   const fx = new TestFixtures();
-  let popId: number;
-  let popName: string;
+  let genreId: number;
+  let genreName: string;
+  let albumSubcategoryId: number;
+  let albumSubcategoryName: string;
+  let singleSubcategoryId: number;
+  let singleSubcategoryName: string;
+  let popAlias: string;
 
   beforeAll(async () => {
-    popName = `Pop ${Date.now()}`;
-    popId = (await fx.genre({ name: popName })).id;
-    const alias = await DiscotecaDB.upsertGenreAlias(`K-Pop ${Date.now()}`, popId);
+    genreName = `Pop ${Date.now()}`;
+    genreId = (await fx.discotecaGenre({ name: genreName })).id;
+
+    albumSubcategoryName = `Álbuns de ${genreName}`;
+    albumSubcategoryId = (await fx.discotecaSubcategory({ genreId, isAlbum: true, name: albumSubcategoryName, emoji: '💽' })).id;
+    singleSubcategoryName = `Singles de ${genreName}`;
+    singleSubcategoryId = (await fx.discotecaSubcategory({ genreId, isAlbum: false, name: singleSubcategoryName, emoji: '🎵' })).id;
+
+    popAlias = `K-Pop ${Date.now()}`;
+    const alias = await DiscotecaDB.upsertGenreAlias(popAlias, genreId);
     fx.onCleanup(async () => { await db.delete(discotecaGenreAliases).where(eq(discotecaGenreAliases.id, alias!.id)); });
   });
 
   afterAll(() => fx.cleanup());
 
-  test("resolves a mapped alias and reports an unmapped one, case-insensitively", async () => {
-    const aliasRow = await db.select().from(discotecaGenreAliases).where(eq(discotecaGenreAliases.genreId, popId)).limit(1).then(a => a[0]!);
-    const upperCaseAlias = aliasRow.alias.toUpperCase();
+  test("resolves a mapped alias to the album subcategory and reports an unmapped one, case-insensitively", async () => {
+    const result = await DiscotecaDB.resolveGenresByAliases([popAlias.toUpperCase(), "Totally Unmapped Genre"], true);
 
-    const result = await DiscotecaDB.resolveGenresByAliases([upperCaseAlias, "Totally Unmapped Genre"]);
-
-    expect(result.resolved).toEqual([{ id: popId, name: popName }]);
+    expect(result.resolved).toEqual([{ id: albumSubcategoryId, name: albumSubcategoryName }]);
     expect(result.unmapped).toEqual(["Totally Unmapped Genre"]);
+  });
+
+  test("the same alias resolves to the single subcategory when isAlbum is false", async () => {
+    const result = await DiscotecaDB.resolveGenresByAliases([popAlias], false);
+
+    expect(result.resolved).toEqual([{ id: singleSubcategoryId, name: singleSubcategoryName }]);
+    expect(result.unmapped).toEqual([]);
+  });
+
+  test("a raw string matching the canonical genre name resolves without needing an alias, case-insensitively", async () => {
+    const result = await DiscotecaDB.resolveGenresByAliases([genreName.toUpperCase()], true);
+
+    expect(result.resolved).toEqual([{ id: albumSubcategoryId, name: albumSubcategoryName }]);
+    expect(result.unmapped).toEqual([]);
   });
 });

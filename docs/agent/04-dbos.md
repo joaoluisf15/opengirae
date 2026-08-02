@@ -115,7 +115,9 @@ with multiple replicas).
   `captionOnly: true` (then `editMessageCaption`) — pass `captionOnly: true`
   when re-editing a message that already has this *exact* photo and only the
   caption/buttons changed (an unchanged-URL `editMessageMedia` gets Telegram's
-  "message is not modified" error).
+  "message is not modified" error). `audioUrl` (checked before `photoUrl`) →
+  `sendAudio`, with `audioPerformer`/`audioTitle` passed through — added for
+  Discoteca's `/disco` single-preview playback, the only caller today.
 - **GIFs**: `isAnimatedMediaUrl()` sniffs `.gif`/`.mp4`/`.webm` and routes to
   `sendAnimation` automatically for any `photoUrl`. This is soundless
   (Telegram's animation endpoint) — pass `isVideo: true` alongside `photoUrl`

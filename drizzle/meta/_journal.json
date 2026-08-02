@@ -183,6 +183,34 @@
       "when": 1785436333221,
       "tag": "0025_slimy_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785445671554,
+      "tag": "0026_certain_vindicator",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785451748532,
+      "tag": "0027_old_shinobi_shaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785467358550,
+      "tag": "0028_tiresome_stingray",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785468195303,
+      "tag": "0029_unusual_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }

@@ -12,10 +12,11 @@ describe("DiscotecaDB.createEntry / getEntry", () => {
 
   test("creates an entry and reads it back with getEntry", async () => {
     const rarityId = await anyRarityId();
+    const artistId = (await fx.discotecaArtist()).id;
     const appleMusicId = `test-apple-music-${Date.now()}`;
     const created = await DiscotecaDB.createEntry({
       name: "Test Album",
-      artistName: "Test Artist",
+      artistId,
       appleMusicId,
       type: 'album',
       rarityId,
@@ -34,10 +35,11 @@ describe("DiscotecaDB.createEntry / getEntry", () => {
 
   test("a single can link to its parent album via albumId, and losing the album sets it null", async () => {
     const rarityId = await anyRarityId();
+    const artistId = (await fx.discotecaArtist()).id;
     const albumAppleMusicId = `test-apple-music-album-${Date.now()}`;
     const album = await DiscotecaDB.createEntry({
       name: "Test Parent Album",
-      artistName: "Test Artist",
+      artistId,
       appleMusicId: albumAppleMusicId,
       type: 'album',
       rarityId,
@@ -46,7 +48,7 @@ describe("DiscotecaDB.createEntry / getEntry", () => {
 
     const single = await DiscotecaDB.createEntry({
       name: "Test Single",
-      artistName: "Test Artist",
+      artistId,
       appleMusicId: `test-apple-music-single-${Date.now()}`,
       type: 'single',
       rarityId,

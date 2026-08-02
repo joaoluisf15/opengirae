@@ -55,7 +55,7 @@ describe("/upload validation branches (pre-upload)", () => {
       replyToAuthorId: authorId,
       replyToPhotoUrl: 'https://example.com/big-video.mp4',
       replyToIsVideo: true,
-      replyToFileSizeBytes: 60 * 1024 * 1024, // over the 50MB cap
+      replyToFileSizeBytes: 60 * 1024 * 1024, // over the 20MB cap
     });
     await expect(UploadCommand.execute(ctx, { card })).resolves.toBeUndefined();
 
@@ -71,7 +71,7 @@ describe("/upload validation branches (pre-upload)", () => {
       name: 'upload', authorId, args: [String(cardId)],
       replyToAuthorId: authorId,
       replyToPhotoUrl: 'https://example.com/big-photo.jpg',
-      replyToFileSizeBytes: 60 * 1024 * 1024, // over the 50MB cap, isVideo left unset
+      replyToFileSizeBytes: 60 * 1024 * 1024, // over the 20MB cap, isVideo left unset
     });
     await expect(UploadCommand.execute(ctx, { card })).resolves.toBeUndefined();
 

@@ -16,11 +16,13 @@ mock.module('telegramsjs', () => ({
     async sendPhoto(args: any) { sentMessages.push({ method: 'sendPhoto', ...args }); return { id: `msg-${sentMessages.length}` } }
     async sendAnimation(args: any) { sentMessages.push({ method: 'sendAnimation', ...args }); return { id: `msg-${sentMessages.length}` } }
     async sendVideo(args: any) { sentMessages.push({ method: 'sendVideo', ...args }); return { id: `msg-${sentMessages.length}` } }
+    async sendAudio(args: any) { sentMessages.push({ method: 'sendAudio', ...args }); return { id: `msg-${sentMessages.length}` } }
     async deleteMessage() { }
     async answerCallbackQuery(args: any) { sentMessages.push({ method: 'answerCallbackQuery', ...args }) }
   
     async getChatMember() { return { status: 'member' } }
     async getMe() { return { username: 'test-bot' } }
+    async getUserProfilePhotos() { return { photos: [] } }
   },
 }))
 

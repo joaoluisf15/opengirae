@@ -50,6 +50,9 @@ export type MessageReply = string | {
     photoUrl?: string;
     // forces sendVideo instead of the extension-sniffed sendPhoto/sendAnimation.
     isVideo?: boolean;
+    audioUrl?: string;
+    audioPerformer?: string;
+    audioTitle?: string;
     editMessageId?: string;
     buttons?: ButtonSpec[];
     buttonRows?: ButtonSpec[][];
@@ -104,6 +107,9 @@ export const reply = maybeStep('reply', async (cmd: IncomingCommand, content: Me
         const text = typeof content === 'string' ? content : content.content;
         const photoUrl = typeof content === 'string' ? undefined : content.photoUrl;
         const isVideo = typeof content === 'string' ? false : !!content.isVideo;
+        const audioUrl = typeof content === 'string' ? undefined : content.audioUrl;
+        const audioPerformer = typeof content === 'string' ? undefined : content.audioPerformer;
+        const audioTitle = typeof content === 'string' ? undefined : content.audioTitle;
         const editMessageId = typeof content === 'string' ? undefined : content.editMessageId;
         const captionOnly = typeof content === 'string' ? false : !!content.captionOnly;
         const embedFields = typeof content === 'string' ? undefined : content.embedFields;
@@ -118,6 +124,8 @@ export const reply = maybeStep('reply', async (cmd: IncomingCommand, content: Me
         let method: PendingResponse['method'] = 'sendMessage';
         if (targetMessageId) {
             method = photoUrl ? (captionOnly ? 'editMessageCaption' : 'editMessageMedia') : 'editMessageText';
+        } else if (audioUrl) {
+            method = 'sendAudio';
         } else if (photoUrl) {
             method = isVideo ? 'sendVideo' : isAnimatedMediaUrl(photoUrl) ? 'sendAnimation' : 'sendPhoto';
         }
@@ -127,6 +135,9 @@ export const reply = maybeStep('reply', async (cmd: IncomingCommand, content: Me
             chatId: cmd.message.chat.id,
             content: text,
             photoUrl,
+            audioUrl,
+            audioPerformer,
+            audioTitle,
             messageId: targetMessageId,
             replyToMessageId: targetMessageId ? undefined : cmd.message.id,
             threadId: targetMessageId ? undefined : cmd.message.chat.threadId,

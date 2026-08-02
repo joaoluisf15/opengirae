@@ -7,7 +7,7 @@ describe("DiscotecaDB.searchEntriesByName", () => {
   const suffix = Date.now();
 
   beforeAll(async () => {
-    await fx.discotecaEntry({ name: `Café Amargo ${suffix}`, artistName: "Test Artist" });
+    await fx.discotecaEntry({ name: `Café Amargo ${suffix}` });
     await fx.discotecaEntry({ name: `Unrelated Entry ${suffix}` });
   });
 

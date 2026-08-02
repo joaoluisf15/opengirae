@@ -11,8 +11,8 @@ describe("DiscotecaDB.upsertGenreAlias", () => {
   let genreBId: number;
 
   beforeAll(async () => {
-    genreAId = (await fx.genre({ name: `Genre A ${Date.now()}` })).id;
-    genreBId = (await fx.genre({ name: `Genre B ${Date.now()}` })).id;
+    genreAId = (await fx.discotecaGenre({ name: `Genre A ${Date.now()}` })).id;
+    genreBId = (await fx.discotecaGenre({ name: `Genre B ${Date.now()}` })).id;
   });
 
   afterAll(() => fx.cleanup());

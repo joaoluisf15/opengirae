@@ -2,7 +2,7 @@ import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
 import type { IncomingCommand } from '@girae/common/commands/types'
 
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 type CardDetails = NonNullable<Awaited<ReturnType<typeof CardsDB.getCardWithDetails>>>
 
@@ -21,7 +21,6 @@ export function isVideoLike(source: { isVideo?: boolean; isAnimatedPhoto?: boole
   return !!source?.isVideo || !!source?.isAnimatedPhoto
 }
 
-// ZWJ + variation selector-16 let multi-codepoint families/skin-tones through; flags are Regional_Indicator pairs, a separate Unicode class Extended_Pictographic doesn't cover.
 const EMOJI_ONLY_REGEX = /^[\p{Extended_Pictographic}\p{Regional_Indicator}‍️]+$/u
 
 export function isEmojiOnly(str: string): boolean {

@@ -2,3 +2,6 @@
 if (!process.env.BULLMQ_QUEUE_SUFFIX?.startsWith('test')) {
   process.env.BULLMQ_QUEUE_SUFFIX = `test-${process.pid}`
 }
+
+// must load before any command file eagerly binds the real @syncfm/applemusic-api
+import "./appleMusicMock"

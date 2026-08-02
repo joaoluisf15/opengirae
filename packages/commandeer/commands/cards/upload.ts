@@ -50,15 +50,15 @@ export default class UploadCommand extends Command {
   @CommandArgument([{ name: 'card', type: CommandArgumentType.CARD, guard: cativeiroEligibilityGuard, nullable: true }])
   static override async execute(ctx: IncomingCommand, args: { card?: CardDetails }) {
     if (!args.card) {
-      await reply(ctx, '📌 Use `/upload id` respondendo a uma foto ou vídeo de até 50 MB para personalizar seu card!\n\n🎥 Vídeos devem estar nos formatos 9:16 ou 3:4.\n🖼️ Fotos devem estar no formato 3:4.\n\n✨ Para personalizar seu card com um emoji, use `/emojicard id emoji`.')
+      await reply(ctx, '📌 Use `/upload id` respondendo a uma foto ou vídeo de até 20 MB para personalizar seu card!\n\n🎥 Vídeos devem estar nos formatos 9:16 ou 3:4.\n🖼️ Fotos devem estar no formato 3:4.\n\n✨ Para personalizar seu card com um emoji, use `/emojicard id emoji`.')
       return
     }
 
     const source = ctx.message.photoUrl ? ctx.message : ctx.message.replyTo
 
-    // checked before photoUrl: fileSizeBytes is known upfront even if getFile fails on a huge file.
+    // TODO: once the new file system is in place, MAX_UPLOAD should go to 50MB and the string above needs to change
     if ((source?.fileSizeBytes ?? 0) > MAX_UPLOAD_BYTES) {
-      await reply(ctx, '😔 Essa mídia passa de 50 MB e eu não posso aceitar ela... Tenta comprimir ou enviar uma versão mais leve?')
+      await reply(ctx, '😔 Essa mídia passa de 20 MB e eu não posso aceitar ela... Tenta comprimir ou enviar uma versão mais leve?')
       return
     }
 

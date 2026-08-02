@@ -29,11 +29,24 @@ function toCandidate(resource: { id: string; attributes: { name?: string; artist
   };
 }
 
+// collapses Apple Music's separate clean/explicit resources down to one candidate
+function dedupeCandidates(candidates: AppleMusicSearchCandidate[]): AppleMusicSearchCandidate[] {
+  const seen = new Set<string>();
+  const result: AppleMusicSearchCandidate[] = [];
+  for (const c of candidates) {
+    const key = `${c.name.trim().toLowerCase()}|${c.artistName.trim().toLowerCase()}|${c.releaseDate ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(c);
+  }
+  return result;
+}
+
 export async function searchAlbums(term: string): Promise<AppleMusicSearchCandidate[]> {
   try {
     const client = await getClient();
     const response = await client.Search.search({ term, types: [ResourceType.Albums] });
-    return (response.results.albums?.data ?? []).map(toCandidate);
+    return dedupeCandidates((response.results.albums?.data ?? []).map(toCandidate));
   } catch (e) {
     warn('apple-music', `searchAlbums(${term}) failed: ${e}`);
     return [];
@@ -44,7 +57,7 @@ export async function searchSongs(term: string): Promise<AppleMusicSearchCandida
   try {
     const client = await getClient();
     const response = await client.Search.search({ term, types: [ResourceType.Songs] });
-    return (response.results.songs?.data ?? []).map(toCandidate);
+    return dedupeCandidates((response.results.songs?.data ?? []).map(toCandidate));
   } catch (e) {
     warn('apple-music', `searchSongs(${term}) failed: ${e}`);
     return [];

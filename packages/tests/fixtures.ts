@@ -13,7 +13,7 @@ import { db } from "@girae/database/index";
 import { users, linkedAccounts, userProfiles } from "@girae/database/schemas/users";
 import { cards, categories, subcategories, cardSubcategories, rarities, userCards } from "@girae/database/schemas/cards";
 import { storeItems } from "@girae/database/schemas/vanities";
-import { discotecaGenres, discotecaEntries } from "@girae/database/schemas/discoteca";
+import { discotecaGenres, discotecaSubcategories, discotecaEntries, discotecaArtists } from "@girae/database/schemas/discoteca";
 import { eq, and } from "drizzle-orm";
 import { UsersDB } from "@girae/database/users";
 import { CardsDB } from "@girae/database/cards";
@@ -82,25 +82,47 @@ export class TestFixtures {
     return { id };
   }
 
-  async genre(opts: { name?: string; emoji?: string } = {}): Promise<{ id: number }> {
+  /** The canonical genre concept (e.g. "Pop") that aliases point at - shared by both its subcategories. */
+  async discotecaGenre(opts: { name?: string } = {}): Promise<{ id: number }> {
     const name = opts.name ?? `Test Genre ${Bun.randomUUIDv7()}`;
-    const row = await DiscotecaDB.createGenre(name, opts.emoji ?? '🎵');
+    const row = await DiscotecaDB.createGenre(name);
     const id = row!.id;
     this.onCleanup(async () => { await db.delete(discotecaGenres).where(eq(discotecaGenres.id, id)); });
     return { id };
   }
 
+  /** The browsable album/single variant of a genre (e.g. "Álbuns de Pop") - what entries actually link to. */
+  async discotecaSubcategory(opts: { name?: string; emoji?: string; genreId?: number; isAlbum?: boolean } = {}): Promise<{ id: number }> {
+    const name = opts.name ?? `Test Subcategory ${Bun.randomUUIDv7()}`;
+    const genreId = opts.genreId ?? (await this.discotecaGenre()).id;
+    const row = await DiscotecaDB.createSubcategory(genreId, name, opts.emoji ?? '🎵', opts.isAlbum ?? true);
+    const id = row!.id;
+    this.onCleanup(async () => { await db.delete(discotecaSubcategories).where(eq(discotecaSubcategories.id, id)); });
+    return { id };
+  }
+
+  async discotecaArtist(opts: { name?: string; appleMusicArtistId?: string } = {}): Promise<{ id: number }> {
+    const row = await DiscotecaDB.getOrCreateArtist(
+      opts.appleMusicArtistId ?? `test-apple-music-artist-${Bun.randomUUIDv7()}`,
+      opts.name ?? `Test Artist ${Bun.randomUUIDv7()}`,
+    );
+    const id = row!.id;
+    this.onCleanup(async () => { await db.delete(discotecaArtists).where(eq(discotecaArtists.id, id)); });
+    return { id };
+  }
+
   async discotecaEntry(opts: {
     name?: string;
-    artistName?: string;
+    artistId?: number;
     appleMusicId?: string;
     type?: 'single' | 'album';
     rarityId?: number;
   } = {}): Promise<{ id: number }> {
     const rarityId = opts.rarityId ?? await anyRarityId();
+    const artistId = opts.artistId ?? (await this.discotecaArtist()).id;
     const row = await DiscotecaDB.createEntry({
       name: opts.name ?? `Test Entry ${Bun.randomUUIDv7()}`,
-      artistName: opts.artistName ?? 'Test Artist',
+      artistId,
       appleMusicId: opts.appleMusicId ?? `test-apple-music-${Bun.randomUUIDv7()}`,
       type: opts.type ?? 'single',
       rarityId,
