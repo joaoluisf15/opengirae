@@ -28,7 +28,7 @@ export default class GirarCommand extends Command {
     name: 'girar',
     description: 'Tente a sorte e puxe uma carta!',
     usage: '/girar',
-    aliases: ['rodar', 'rechear', 'carimbar', 'draw', 'gi', 'mirar', 'sentar', 'gozar'],
+    aliases: ['rodar', 'rechear', 'carimbar', 'draw', 'gi', 'mirar', 'sentar', 'gozar', 'eliana', 'micar', 'imicae'],
     useWorkflow: true
   }
 
