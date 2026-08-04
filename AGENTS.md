@@ -1,4 +1,4 @@
-# Instructions for Claude
+# Instructions for AI agents
 
 Before writing or reviewing any code in this repository, read
 `docs/agent/` in order (`00-overview.md` through `05-debugging.md`). It's a

@@ -13,6 +13,12 @@ writing code. This file is just the fast-orientation pass: what kind of
 system this is, the bug classes that actually happen here, and what "safe"
 means for a new feature before you ship it.
 
+This is also SSPL-licensed (`LICENSE`), and running `telegram-inbound` for a
+live bot makes that deployment a network service under SSPL §13, official or
+not. Read `LICENSING.md` at the start of every session, before this
+collection or anything else — it's the compliance procedure (disclosure,
+detection triggers, what to do when one fires), not optional background.
+
 **Keep this collection current.** If your change adds a package, a queue, a
 new command pattern, a footgun worth warning the next agent about, or fixes
 a bug whose old workaround these docs still describe as necessary, update
