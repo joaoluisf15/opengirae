@@ -54,7 +54,8 @@ export const userProfiles = pgTable("user_profiles", {
   reputation: integer().notNull().default(0),
   favoriteColor: text().notNull().default("#FF94DB"),
   favoriteCardColor: text(),
-  favoriteDiscotecaId: integer().references(() => discotecaEntries.id),
+  favoriteDiscotecaAlbumId: integer().references(() => discotecaEntries.id),
+  favoriteDiscotecaSingleId: integer().references(() => discotecaEntries.id),
   lastFmUsername: text(),
 
   isMarried: boolean().notNull().default(false),

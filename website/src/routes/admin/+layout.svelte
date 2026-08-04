@@ -15,7 +15,8 @@
 		{ href: '/admin/cards', label: 'Cartas' },
 		{ href: '/admin/rarities', label: 'Raridades' },
 		{ href: '/admin/promo-codes', label: 'Códigos Promos' },
-		{ href: '/admin/economy', label: 'Economia' }
+		{ href: '/admin/economy', label: 'Economia' },
+		{ href: '/admin/settings', label: 'Configurações' }
 	];
 </script>
 

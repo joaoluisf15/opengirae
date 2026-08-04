@@ -3,6 +3,7 @@ import { reply, pageNavRow } from '@girae/common/dbos/messaging'
 import { DiscotecaDB } from '@girae/database/discoteca'
 import { UsersDB } from '@girae/database/users'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
+import { renderEntryLine, renderCollectionMarker } from './disco'
 import type { IncomingCommand } from '@girae/common/commands/types'
 
 const PAGE_SIZE = 20
@@ -28,20 +29,17 @@ async function renderGenreEntriesPage(subcategoryId: number, userId: number, pag
   if (!subcategory) return null
 
   const offset = page * PAGE_SIZE
-  const { rows, total } = await DiscotecaDB.getEntriesForGenre(subcategoryId, userId, PAGE_SIZE, offset)
+  const { rows, total, owned } = await DiscotecaDB.getEntriesForGenre(subcategoryId, userId, PAGE_SIZE, offset)
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const lines = rows.length > 0
-    ? rows.map(e => {
-      const typeEmoji = e.type === 'album' ? '💽' : '🎵'
-      const countSuffix = e.ownedCount > 0 ? ` \`${e.ownedCount}x\`` : ''
-      return `${e.rarityEmoji} \`${e.id}\`. **${escapeMarkdown(e.name)}** ${typeEmoji}${countSuffix}`
-    }).join('\n')
+    ? rows.map(renderEntryLine).join('\n')
     : '_Nenhum álbum ou single neste gênero ainda._'
   const pageInfo = totalPages > 1 ? `\n\n📃 Página \`${page + 1}\` de **${totalPages}**` : ''
+  const marker = renderCollectionMarker(total, owned, subcategory.isAlbum ? 'álbuns' : 'singles')
 
   return {
-    content: `${subcategory.emoji} \`${subcategory.id}\`. **${escapeMarkdown(subcategory.name)}**\n\n${lines}${pageInfo}`,
+    content: `${subcategory.emoji} \`${subcategory.id}\`. **${escapeMarkdown(subcategory.name)}**\n${marker}\n\n${lines}${pageInfo}`,
     hasNext: offset + rows.length < total,
     totalPages,
   }

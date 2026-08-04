@@ -2,7 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DiscotecaDB } from "@girae/database/discoteca";
-import { uploadBytes } from "@girae/common/utilities/storage";
+import { writeScratchFile } from "@girae/common/media/mediaRef";
 import { warn } from "@girae/common/logger";
 
 interface ArtworkLike {
@@ -38,9 +38,6 @@ export async function tagPreviewAudio(audioBytes: Uint8Array, artworkBytes: Uint
       ...(tags.albumName ? ['-metadata', `album=${tags.albumName}`] : []),
       ...(tags.releaseDate ? ['-metadata', `date=${tags.releaseDate}`] : []),
       ...(tags.genre ? ['-metadata', `genre=${tags.genre}`] : []),
-      // moves the moov atom (title/artist/cover-art) to the front - without this it lands after
-      // mdat, and Telegram's server (which reads a bounded prefix of remote URLs, not the whole
-      // file) never reaches it, so the sent audio shows no title, performer, or cover.
       '-movflags', '+faststart',
       outputPath,
     );
@@ -68,7 +65,7 @@ export interface PreviewTagData extends PreviewTags {
 
 export async function getOrProcessPreview(track: PreviewTagData): Promise<string | null> {
   const cached = await DiscotecaDB.getPreviewCacheEntry(track.appleMusicTrackId);
-  if (cached) return cached.cdnUrl;
+  if (cached) return cached.mediaRef;
 
   try {
     const artworkUrl = resolveArtwork150(track.artwork);
@@ -83,9 +80,9 @@ export async function getOrProcessPreview(track: PreviewTagData): Promise<string
 
     const taggedBytes = await tagPreviewAudio(audioBytes, artworkBytes, track);
 
-    const cdnUrl = await uploadBytes(taggedBytes, 'discoteca-previews', 'm4a', 'audio/mp4');
-    await DiscotecaDB.setPreviewCacheEntry(track.appleMusicTrackId, cdnUrl);
-    return cdnUrl;
+    const mediaRef = await writeScratchFile(`discoteca-previews/${Bun.randomUUIDv7()}.m4a`, taggedBytes);
+    await DiscotecaDB.setPreviewCacheEntry(track.appleMusicTrackId, mediaRef);
+    return mediaRef;
   } catch (e) {
     warn('apple-music', `getOrProcessPreview(${track.appleMusicTrackId}) failed: ${e}`);
     return null;

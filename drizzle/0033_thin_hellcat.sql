@@ -1,0 +1,1 @@
+ALTER TABLE "discoteca_entries" ADD COLUMN "animatedArtworkUrl" text;

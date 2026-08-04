@@ -67,6 +67,40 @@ describe.skipIf(!hasFfmpeg)("tagPreviewAudio (real ffmpeg)", () => {
   });
 });
 
+describe.skipIf(!hasFfmpeg)("getOrProcessPreview writes to scratch, not S3", () => {
+  test("a fresh (non-cached) preview is written under the scratch volume and returns a file:// ref", async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'discoteca-scratch-test-'));
+    const prevScratch = process.env.SCRATCH_DIR;
+    process.env.SCRATCH_DIR = dir;
+    try {
+      const fixturesDir = await mkdtemp(join(tmpdir(), 'discoteca-fixtures-'));
+      const audio = await synthAudio(fixturesDir);
+      const originalFetch = fetch;
+      // @ts-expect-error bun-types declares fetch as a namespace, this reassignment is intentional
+      fetch = (async () => new Response(audio)) as unknown as typeof fetch;
+
+      const trackId = `test-scratch-${Date.now()}`;
+      const result = await getOrProcessPreview({
+        appleMusicTrackId: trackId,
+        previewUrl: "https://irrelevant.invalid/preview.m4a",
+        title: "Scratch Track",
+        artistName: "Test Artist",
+      });
+
+      // @ts-expect-error bun-types declares fetch as a namespace, this reassignment is intentional
+      fetch = originalFetch;
+      await rm(fixturesDir, { recursive: true, force: true });
+
+      expect(result).toMatch(/^file:\/\/scratch\//);
+      const key = result!.replace('file://scratch/', '');
+      expect(await Bun.file(join(dir, key)).exists()).toBe(true);
+    } finally {
+      process.env.SCRATCH_DIR = prevScratch;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("getOrProcessPreview cache hit", () => {
   test("returns the cached URL immediately without fetching or invoking ffmpeg", async () => {
     const trackId = `test-preview-cache-${Date.now()}`;

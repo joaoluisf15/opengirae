@@ -1,0 +1,1 @@
+ALTER TABLE "discoteca_subcategories" ADD COLUMN "rarityModifier" integer DEFAULT 100 NOT NULL;

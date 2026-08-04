@@ -16,18 +16,18 @@ describe("DiscotecaDB.getPreviewCacheEntry / setPreviewCacheEntry", () => {
     expect(entry).toBeUndefined();
   });
 
-  test("caches a URL and returns it on a later lookup", async () => {
-    await DiscotecaDB.setPreviewCacheEntry(trackId, "https://cdn.example.com/preview1.mp4");
+  test("caches a ref and returns it on a later lookup", async () => {
+    await DiscotecaDB.setPreviewCacheEntry(trackId, "file://scratch/preview1.m4a");
 
     const entry = await DiscotecaDB.getPreviewCacheEntry(trackId);
-    expect(entry?.cdnUrl).toBe("https://cdn.example.com/preview1.mp4");
+    expect(entry?.mediaRef).toBe("file://scratch/preview1.m4a");
   });
 
-  test("re-caching the same track id updates the URL in place, not a duplicate row", async () => {
-    await DiscotecaDB.setPreviewCacheEntry(trackId, "https://cdn.example.com/preview2.mp4");
+  test("re-caching the same track id updates the ref in place, not a duplicate row", async () => {
+    await DiscotecaDB.setPreviewCacheEntry(trackId, "file://scratch/preview2.m4a");
 
     const rows = await db.select().from(discotecaPreviewCache).where(eq(discotecaPreviewCache.appleMusicTrackId, trackId));
     expect(rows.length).toBe(1);
-    expect(rows[0]!.cdnUrl).toBe("https://cdn.example.com/preview2.mp4");
+    expect(rows[0]!.mediaRef).toBe("file://scratch/preview2.m4a");
   });
 });

@@ -115,9 +115,21 @@ with multiple replicas).
   `captionOnly: true` (then `editMessageCaption`) — pass `captionOnly: true`
   when re-editing a message that already has this *exact* photo and only the
   caption/buttons changed (an unchanged-URL `editMessageMedia` gets Telegram's
-  "message is not modified" error). `audioUrl` (checked before `photoUrl`) →
-  `sendAudio`, with `audioPerformer`/`audioTitle` passed through — added for
-  Discoteca's `/disco` single-preview playback, the only caller today.
+  "message is not modified" error). `audioUrl` or `audioFileId` (checked
+  before `photoUrl`) → `sendAudio`, with `audioPerformer`/`audioTitle` passed
+  through — added for Discoteca's `/disco` single-preview playback, the only
+  caller today. `audioFileId` (a cached Telegram `file_id`) takes priority
+  over `audioUrl` in the answerer and skips any file resolution/upload
+  entirely. `audioEntryId` (the Discoteca entry's DB id) is optional and only
+  meaningful alongside `audioUrl`/`audioFileId`: after a successful
+  `sendAudio`, `settleReply()` persists the `file_id` Telegram returns back
+  onto that entry (`discotecaEntries.telegramFileId`), so the next `/disco`
+  view of the same single hits the `audioFileId` fast path instead of
+  re-uploading. Discoteca previews themselves are no longer S3 URLs — they're
+  `file://scratch/<key>` refs written by `getOrProcessPreview`
+  (`packages/services/apple-music/preview.ts`) and resolved via `SCRATCH_DIR`
+  (see `packages/common/media/mediaRef.ts`); the answerer reads the local
+  file and multipart-uploads it exactly once per track, on the first view.
 - **GIFs**: `isAnimatedMediaUrl()` sniffs `.gif`/`.mp4`/`.webm` and routes to
   `sendAnimation` automatically for any `photoUrl`. This is soundless
   (Telegram's animation endpoint) — pass `isVideo: true` alongside `photoUrl`

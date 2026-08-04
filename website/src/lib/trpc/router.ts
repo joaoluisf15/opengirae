@@ -11,6 +11,7 @@ import { telegramInventoryRouter } from '$lib/trpc/routes/telegram/inventory';
 
 import { promoCodesRouter } from '$lib/trpc/routes/promoCodes';
 import { economyRouter } from '$lib/trpc/routes/economy';
+import { settingsRouter } from '$lib/trpc/routes/settings';
 
 export const router = t.router({
 	users: usersRouter,
@@ -21,6 +22,7 @@ export const router = t.router({
 	rarities: raritiesRouter,
     promoCodes: promoCodesRouter,
 	economy: economyRouter,
+	settings: settingsRouter,
 	telegram: t.router({
 		cards: telegramCardsRouter,
 		store: telegramStoreRouter,

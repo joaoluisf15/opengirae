@@ -2,6 +2,7 @@ import { createRestManager } from '@discordeno/rest'
 import { MessageComponentTypes, ButtonStyles, InteractionResponseTypes, MessageFlags } from '@discordeno/types'
 import type { PendingResponse } from '@girae/common/commands/types'
 import { error, warn } from '@girae/common/logger'
+import type { SendResult } from '../handler'
 
 const manager = createRestManager({
   token: process.env.DISCORD_TOKEN!,
@@ -72,7 +73,7 @@ function splitInteractionId(callbackQueryId: string): { interactionId: bigint; t
   return { interactionId: BigInt(callbackQueryId.slice(0, sep)), token: callbackQueryId.slice(sep + 1) }
 }
 
-export async function sendDiscordAnswer(response: PendingResponse): Promise<string | undefined> {
+export async function sendDiscordAnswer(response: PendingResponse): Promise<SendResult | undefined> {
   switch (response.method) {
     case 'sendMessage':
     case 'sendPhoto':
@@ -89,7 +90,7 @@ export async function sendDiscordAnswer(response: PendingResponse): Promise<stri
         } : {}),
         components: buildComponents(response.buttons),
       })
-      return String(msg.id)
+      return { messageId: String(msg.id) }
     }
     case 'editMessageText':
     case 'editMessageCaption':
@@ -101,7 +102,7 @@ export async function sendDiscordAnswer(response: PendingResponse): Promise<stri
           files,
           components: buildComponents(response.buttons),
         })
-        return String(msg.id)
+        return { messageId: String(msg.id) }
       }
 
       const msg = await manager.editMessage(BigInt(response.chatId), BigInt(response.messageId!), {
@@ -109,7 +110,7 @@ export async function sendDiscordAnswer(response: PendingResponse): Promise<stri
         files,
         components: buildComponents(response.buttons),
       })
-      return String(msg.id)
+      return { messageId: String(msg.id) }
     }
     case 'deleteMessage':
       await manager.deleteMessage(BigInt(response.chatId), BigInt(response.messageId!))

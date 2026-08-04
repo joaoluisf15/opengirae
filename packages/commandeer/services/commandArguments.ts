@@ -171,15 +171,23 @@ async function parseDiscotecaSubcategory(raw: string): Promise<ParseOutcome> {
   return { ok: true, value: results[0] }
 }
 
-async function parseDiscotecaEntry(raw: string): Promise<ParseOutcome> {
+async function parseDiscotecaEntry(raw: string, entryType?: 'album' | 'single'): Promise<ParseOutcome> {
+  const notFoundByIdMessage = entryType === 'album' ? 'Não encontrei um álbum com esse ID.'
+    : entryType === 'single' ? 'Não encontrei um single com esse ID.'
+      : 'Não encontrei um item da Discoteca com esse ID.'
+  const notFoundByNameMessage = entryType === 'album' ? 'Não encontrei um álbum com esse nome.'
+    : entryType === 'single' ? 'Não encontrei um single com esse nome.'
+      : 'Não encontrei um item da Discoteca com esse nome.'
+
   const asId = parseStrictId(raw)
   if (asId !== undefined) {
     const entry = await DiscotecaDB.getEntryWithDetails(asId)
-    return entry ? { ok: true, value: entry } : { ok: false, message: 'Não encontrei um item da Discoteca com esse ID.' }
+    if (!entry || (entryType && entry.type !== entryType)) return { ok: false, message: notFoundByIdMessage }
+    return { ok: true, value: entry }
   }
 
-  const results = await DiscotecaDB.searchEntriesByName(raw, 100)
-  if (results.length === 0) return { ok: false, message: 'Não encontrei um item da Discoteca com esse nome.' }
+  const results = await DiscotecaDB.searchEntriesByName(raw, 100, entryType)
+  if (results.length === 0) return { ok: false, message: notFoundByNameMessage }
   if (results.length > 1) {
     const lines = results.map(e => `${e.type === 'album' ? '💽' : '🎵'} \`${e.id}\`. **${escapeMarkdown(e.name)}** — ${escapeMarkdown(e.artistName)}`)
     return { ok: false, message: ambiguousResultsMessage(lines) }
@@ -305,7 +313,7 @@ async function parseValue(spec: CommandArgumentSpec, raw: string | undefined, ct
     case CommandArgumentType.SUBCATEGORY: return parseSubcategory(raw)
     case CommandArgumentType.DISCOTECA_GENRE: return parseDiscotecaGenre(raw)
     case CommandArgumentType.DISCOTECA_SUBCATEGORY: return parseDiscotecaSubcategory(raw)
-    case CommandArgumentType.DISCOTECA_ENTRY: return parseDiscotecaEntry(raw)
+    case CommandArgumentType.DISCOTECA_ENTRY: return parseDiscotecaEntry(raw, spec.entryType)
     case CommandArgumentType.VANITY_ITEM: return parseVanityItem(raw, spec.vanityType, spec.showBasePrice)
   }
 }

@@ -27,8 +27,9 @@ let cachedRarityId: number | undefined;
 /** Any existing rarity id - rarities are a small, static catalog, safe to reuse across tests. */
 export async function anyRarityId(): Promise<number> {
   if (cachedRarityId !== undefined) return cachedRarityId;
-  cachedRarityId = await db.select({ id: rarities.id }).from(rarities).limit(1).then(r => r[0]!.id);
-  return cachedRarityId;
+  const id = await db.select({ id: rarities.id }).from(rarities).limit(1).then(r => r[0]!.id);
+  cachedRarityId = id;
+  return id;
 }
 
 export interface TestUser {

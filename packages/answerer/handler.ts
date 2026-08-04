@@ -2,7 +2,13 @@ import type { PendingResponse } from '@girae/common/commands/types'
 import { sendDiscordAnswer } from './platforms/discord'
 import { sendTelegramAnswer } from './platforms/telegram'
 
-export async function sendAnswer(response: PendingResponse): Promise<string | undefined> {
+export interface SendResult {
+  messageId?: string;
+  telegramFileId?: string;
+  telegramFileUniqueId?: string;
+}
+
+export async function sendAnswer(response: PendingResponse): Promise<SendResult | undefined> {
   if (response.platform === 'none') return
 
   if (response.platform === 'discord') {
@@ -11,4 +17,3 @@ export async function sendAnswer(response: PendingResponse): Promise<string | un
     return sendTelegramAnswer(response)
   }
 }
-

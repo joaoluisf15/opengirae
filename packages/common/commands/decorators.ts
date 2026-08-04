@@ -24,7 +24,8 @@ interface BaseCommandArgumentSpec<T = any> {
 export type CommandArgumentSpec<T = any> =
   // showBasePrice: true for admin commands (editbg/delbg/etc.), which must see the raw catalog price
   | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.VANITY_ITEM; vanityType: 'background' | 'sticker'; showBasePrice?: boolean })
-  | (BaseCommandArgumentSpec<T> & { type: Exclude<CommandArgumentType, CommandArgumentType.VANITY_ITEM> });
+  | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.DISCOTECA_ENTRY; entryType?: 'album' | 'single' })
+  | (BaseCommandArgumentSpec<T> & { type: Exclude<CommandArgumentType, CommandArgumentType.VANITY_ITEM | CommandArgumentType.DISCOTECA_ENTRY> });
 
 export function CommandArgument(specs: CommandArgumentSpec[]) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {

@@ -2,6 +2,7 @@ import { Command, Subcommand, Page } from '@girae/common/commands'
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
 import { EconomyDB } from '@girae/database/economy'
+import { SettingsDB } from '@girae/database/settings'
 import { GachaLogic } from '@girae/database/gacha'
 import { DBOS } from '@dbos-inc/dbos-sdk'
 import { reply, buildInteractiveButtons, pageNavRow } from '@girae/common/dbos/messaging'
@@ -12,6 +13,7 @@ import { addHours, formatDistanceToNow, startOfHour } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { claimGirar, getGirarActive, updateGirarStep, releaseGirar } from '../../services/gacha/girarClaim'
 import { buildBulkDrawSummary, renderBulkDrawSummaryPage, cacheBulkDrawSummary, loadBulkDrawSummary } from '../../services/gacha/bulkDrawSummary'
+import { runDiscotecaDraw } from '../../services/gacha/discotecaDraw'
 import { emitCardsNew } from '../../loaders/hooks'
 
 function outOfDrawsMessage(): string {
@@ -35,6 +37,7 @@ export default class GirarCommand extends Command {
   static CATEGORY_SELECTED_EVENT = 'categorySelected'
   static SUBCATEGORY_SELECTED_EVENT = 'subcategorySelected'
   static NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+  static DISCOTECA_CATEGORY_ID = -1
 
   @DBOS.workflow()
   static override async execute(ctx: IncomingCommand) {
@@ -74,8 +77,12 @@ export default class GirarCommand extends Command {
         .filter(c => !c.isHidden)
         .sort((a, b) => a.id - b.id)
       const remainingDraws = user.maxDraws - user.usedDraws
-      const categoryOptions = categories.map(c => ({ title: `${c.emoji} ${c.name}`, data: c.id }))
-      const categoryRows = Array(Math.ceil(categories.length / 2)).fill(2)
+      const discotecaEnabled = await SettingsDB.isDiscotecaEnabled()
+      const categoryOptions = [
+        ...categories.map(c => ({ title: `${c.emoji} ${c.name}`, data: c.id })),
+        ...(discotecaEnabled ? [{ title: '💽 Discoteca', data: GirarCommand.DISCOTECA_CATEGORY_ID }] : []),
+      ]
+      const categoryRows = [...Array(Math.ceil(categories.length / 2)).fill(2), ...(discotecaEnabled ? [1] : [])]
       const categoryContent = `🎲 Olá, **${mention(ctx.message.platform, ctx.message.author.id, ctx.message.author.name)}**! Bem-vindo de volta. Pronto para girar?\n🎨 Você tem **${remainingDraws}** de **${user.maxDraws}** giros restantes.\n\n🕹 Escolha uma categoria:`
 
       await reply(ctx, {
@@ -97,6 +104,11 @@ export default class GirarCommand extends Command {
       }
       const categoryId = categorySelection.value
       let messageId = categorySelection.messageId
+
+      if (categoryId === GirarCommand.DISCOTECA_CATEGORY_ID) {
+        await runDiscotecaDraw(ctx, user, authorId, chatId, messageId)
+        return
+      }
 
       const category = await CardsDB.getCategory(categoryId);
       if (!category) return;

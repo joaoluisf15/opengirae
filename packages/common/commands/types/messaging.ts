@@ -61,8 +61,8 @@ export interface PendingResponse {
   content?: string;
   photoUrl?: string;
   audioUrl?: string;
-  audioPerformer?: string;
-  audioTitle?: string;
+  audioFileId?: string;
+  audio?: { entryId: number; performer?: string; title?: string; thumbnailUrl?: string };
   replyToMessageId?: string;
   messageId?: string;
   callbackQueryId?: string;

@@ -1,7 +1,7 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { TestFixtures } from "@girae/tests";
+import { TestFixtures, anyRarityId } from "@girae/tests";
 import { db } from "../../index";
-import { userDiscoteca } from "../../schemas/discoteca";
+import { userDiscoteca, discotecaEntries } from "../../schemas/discoteca";
 import { and, eq } from "drizzle-orm";
 import { DiscotecaDB } from "../../discoteca";
 
@@ -36,6 +36,18 @@ describe("DiscotecaDB.getEntryWithDetails / getGenreNamesForEntry / getUserDisco
   test("getGenreNamesForEntry returns the linked genre names", async () => {
     const names = await DiscotecaDB.getGenreNamesForEntry(entryId);
     expect(names).toEqual([genreName]);
+  });
+
+  test("getEntryWithDetails includes animatedArtworkUrl", async () => {
+    const entryRow = await DiscotecaDB.createEntry({
+      name: `Test AnimatedCover Entry ${Date.now()}`, artistId, appleMusicId: `test-animatedcover-${Date.now()}`, type: 'album',
+      rarityId: await anyRarityId(),
+      animatedArtworkUrl: "https://cdn.example.com/apple-music/cover.mp4",
+    });
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, entryRow!.id)); });
+
+    const details = await DiscotecaDB.getEntryWithDetails(entryRow!.id);
+    expect(details?.animatedArtworkUrl).toBe("https://cdn.example.com/apple-music/cover.mp4");
   });
 
   test("getUserDiscoteca returns undefined before any draw, the row after", async () => {

@@ -1,5 +1,7 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, afterAll } from "bun:test";
 import { GachaLogic, type SubcategoryForDraw, type CardForDraw } from "./gacha";
+import { TestFixtures } from "@girae/tests";
+import { DiscotecaDB } from "./discoteca";
 
 describe("Gacha Logic - Subcategory Selection", () => {
   const mockSubcategories: SubcategoryForDraw[] = [
@@ -86,4 +88,41 @@ describe("Gacha Logic - Card Selection", () => {
     // Boosted Rare should be roughly double Normal Rare
     expect(counts[2]).toBeGreaterThan(counts[1] * 1.5);
   });
+});
+
+describe("Gacha Logic - Discoteca Draw Queries", () => {
+  const fx = new TestFixtures();
+
+  test("getDiscotecaSubcategoriesForDraw only returns genres with at least one entry, filtered by isAlbum", async () => {
+    const genreId = (await fx.discotecaGenre({ name: `Test Gacha Genre ${Date.now()}` })).id;
+    const albumSubId = (await fx.discotecaSubcategory({ genreId, isAlbum: true, name: `Test Gacha Albums ${Date.now()}` })).id;
+    const singleSubId = (await fx.discotecaSubcategory({ genreId, isAlbum: false, name: `Test Gacha Singles ${Date.now()}` })).id;
+    const artistId = (await fx.discotecaArtist()).id;
+    const entryId = (await fx.discotecaEntry({ artistId, type: 'album' })).id;
+    await DiscotecaDB.setEntryGenres(entryId, [albumSubId]);
+
+    const albumPool = await GachaLogic.getDiscotecaSubcategoriesForDraw(true);
+    expect(albumPool.map(s => s.id)).toContain(albumSubId);
+
+    const singlePool = await GachaLogic.getDiscotecaSubcategoriesForDraw(false);
+    expect(singlePool.map(s => s.id)).not.toContain(singleSubId);
+  });
+
+  test("getDiscotecaEntriesForDraw returns entries linked to the subcategory in CardForDraw shape", async () => {
+    const genreId = (await fx.discotecaGenre({ name: `Test Gacha Genre2 ${Date.now()}` })).id;
+    const subId = (await fx.discotecaSubcategory({ genreId, isAlbum: true, name: `Test Gacha Albums2 ${Date.now()}` })).id;
+    const artistId = (await fx.discotecaArtist()).id;
+    const entryId = (await fx.discotecaEntry({ artistId, type: 'album', name: `Test Gacha Entry ${Date.now()}` })).id;
+    await DiscotecaDB.setEntryGenres(entryId, [subId]);
+
+    const pool = await GachaLogic.getDiscotecaEntriesForDraw(subId);
+    const found = pool.find(e => e.id === entryId);
+    expect(found).toBeDefined();
+    expect(found!.rarityModifier).toBe(100);
+    expect(typeof found!.rarityWeight).toBe('number');
+    expect(typeof found!.rarityEmoji).toBe('string');
+    expect(typeof found!.rank).toBe('number');
+  });
+
+  afterAll(() => fx.cleanup());
 });

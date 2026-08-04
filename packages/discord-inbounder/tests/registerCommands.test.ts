@@ -8,7 +8,7 @@ function collectNames(commands: ReturnType<typeof buildApplicationCommands>): st
   const names: string[] = [];
   for (const c of commands) {
     names.push(c.name);
-    for (const o of c.options ?? []) {
+    for (const o of (c as any).options ?? []) {
       names.push(o.name);
       for (const oo of (o as any).options ?? []) names.push(oo.name);
     }

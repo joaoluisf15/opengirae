@@ -76,3 +76,66 @@ describe("searchAlbums dedupes clean/explicit duplicates", () => {
     expect(results.map(r => r.id)).toEqual(["explicit-id", "spilled-id"]);
   });
 });
+
+describe("pickAvcVariantUrl", () => {
+  const SAMPLE_MASTER_PLAYLIST = `#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-STREAM-INF:BANDWIDTH=235142,CODECS="avc1.64001f",RESOLUTION=360x360
+https://example.com/low_avc.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=7239085,CODECS="hvc1.2.20000000.H150.B0",RESOLUTION=1920x1920
+https://example.com/high_hevc.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=3808360,CODECS="avc1.640020",RESOLUTION=1080x1080
+https://example.com/mid_avc.m3u8
+`;
+
+  test("picks the highest-bandwidth AVC variant, ignoring HEVC even if higher bandwidth", async () => {
+    const { pickAvcVariantUrl } = await import("../../apple-music/resource");
+    expect(pickAvcVariantUrl(SAMPLE_MASTER_PLAYLIST)).toBe("https://example.com/mid_avc.m3u8");
+  });
+
+  test("returns null when there's no AVC variant at all", async () => {
+    const { pickAvcVariantUrl } = await import("../../apple-music/resource");
+    const hevcOnly = `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100,CODECS="hvc1.2"\nhttps://example.com/only_hevc.m3u8\n`;
+    expect(pickAvcVariantUrl(hevcOnly)).toBeNull();
+  });
+
+  test("returns null on an empty or malformed playlist", async () => {
+    const { pickAvcVariantUrl } = await import("../../apple-music/resource");
+    expect(pickAvcVariantUrl("")).toBeNull();
+    expect(pickAvcVariantUrl("not an hls playlist")).toBeNull();
+  });
+});
+
+describe("getOrProcessAnimatedCover", () => {
+  test("returns null when the album has no motion cover, without fetching a playlist", async () => {
+    const originalFetch = fetch;
+    let fetchCallCount = 0;
+    // @ts-expect-error bun-types declares fetch as a namespace, this reassignment is intentional
+    fetch = (async () => {
+      fetchCallCount++;
+      return new Response(JSON.stringify({ data: [{ id: "no-cover-album", attributes: {} }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      const { getOrProcessAnimatedCover } = await import("../../apple-music/resource");
+      const result = await getOrProcessAnimatedCover("no-cover-album");
+      expect(result).toBeNull();
+      expect(fetchCallCount).toBe(1); // only the metadata call, never the (nonexistent) playlist
+    } finally {
+      // @ts-expect-error bun-types declares fetch as a namespace, this reassignment is intentional
+      fetch = originalFetch;
+    }
+  });
+
+  test("returns null instead of throwing when the metadata request fails", async () => {
+    const originalFetch = fetch;
+    // @ts-expect-error bun-types declares fetch as a namespace, this reassignment is intentional
+    fetch = (async () => new Response('', { status: 500 })) as unknown as typeof fetch;
+    try {
+      const { getOrProcessAnimatedCover } = await import("../../apple-music/resource");
+      await expect(getOrProcessAnimatedCover("123")).resolves.toBeNull();
+    } finally {
+      // @ts-expect-error bun-types declares fetch as a namespace, this reassignment is intentional
+      fetch = originalFetch;
+    }
+  });
+});

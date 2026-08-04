@@ -1,0 +1,1 @@
+DROP TABLE "discoteca_album_tracks" CASCADE;

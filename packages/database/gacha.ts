@@ -1,5 +1,6 @@
 import { maybeTransaction } from "./decorators";
 import { cards, categories, subcategories, rarities, cardSubcategories, userCards, cardDrawHistory } from "./schemas/cards";
+import { discotecaSubcategories, discotecaEntries, discotecaEntrySubcategories } from "./schemas/discoteca";
 import { users } from "./schemas/users";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { CardsDB, type CompletedSubcategory } from "./cards";
@@ -139,6 +140,37 @@ export class GachaLogic {
       .innerJoin(cardSubcategories, eq(cardSubcategories.cardId, cards.id))
       .innerJoin(rarities, eq(rarities.id, cards.rarityId))
       .where(eq(cardSubcategories.subcategoryId, subcategoryId));
+  })
+
+  static getDiscotecaSubcategoriesForDraw = maybeTransaction('getDiscotecaSubcategoriesForDraw', async (client, isAlbum: boolean): Promise<SubcategoryForDraw[]> => {
+    return await client
+      .select({
+        id: discotecaSubcategories.id,
+        name: discotecaSubcategories.name,
+        rarityModifier: discotecaSubcategories.rarityModifier,
+      })
+      .from(discotecaSubcategories)
+      .where(and(
+        eq(discotecaSubcategories.isAlbum, isAlbum),
+        sql`EXISTS (SELECT 1 FROM discoteca_entry_subcategories des WHERE des."subcategoryId" = ${discotecaSubcategories.id})`,
+      ));
+  })
+
+  static getDiscotecaEntriesForDraw = maybeTransaction('getDiscotecaEntriesForDraw', async (client, subcategoryId: number): Promise<CardForDraw[]> => {
+    return await client
+      .select({
+        id: discotecaEntries.id,
+        name: discotecaEntries.name,
+        rarityModifier: discotecaEntries.rarityModifier,
+        rarityWeight: rarities.weight,
+        rarityEmoji: rarities.emoji,
+        imageUrl: discotecaEntries.artworkUrl,
+        rank: RARITY_RANK_SQL,
+      })
+      .from(discotecaEntrySubcategories)
+      .innerJoin(discotecaEntries, eq(discotecaEntries.id, discotecaEntrySubcategories.entryId))
+      .innerJoin(rarities, eq(rarities.id, discotecaEntries.rarityId))
+      .where(eq(discotecaEntrySubcategories.subcategoryId, subcategoryId));
   })
 
   static runBulkDraws = maybeTransaction('runBulkDraws', async (

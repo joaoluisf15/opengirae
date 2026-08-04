@@ -1,7 +1,9 @@
 import { TelegramClient } from 'telegramsjs'
 import type { PendingResponse } from '@girae/common/commands/types'
 import { error, warn } from '@girae/common/logger'
+import { parseMediaRef, resolveFilePath } from '@girae/common/media/mediaRef'
 import { marked } from 'marked'
+import type { SendResult } from '../handler'
 
 const tg = new TelegramClient(process.env.TELEGRAM_TOKEN!)
 
@@ -92,7 +94,7 @@ async function editMessageMediaRaw(params: {
   return String(json.result?.message_id ?? params.messageId)
 }
 
-export async function sendTelegramAnswer(response: PendingResponse): Promise<string | undefined> {
+export async function sendTelegramAnswer(response: PendingResponse): Promise<SendResult | undefined> {
   const formattedContent = await processMarkdown(response.content);
 
   switch (response.method) {
@@ -106,7 +108,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
         ...buildReplyParameters(response.replyToMessageId, false),
         ...buildReplyMarkup(response.buttons)
       })
-      return msg.id
+      return { messageId: msg.id }
     }
     case 'editMessageMedia': {
       const photoUrl = response.photoUrl
@@ -119,16 +121,16 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
           parseMode: 'HTML',
           ...buildReplyMarkup(response.buttons)
         })
-        return result === true ? response.messageId : result.id
+        return { messageId: result === true ? response.messageId : result.id }
       }
-      return await editMessageMediaRaw({
+      return { messageId: await editMessageMediaRaw({
         chatId: response.chatId,
         messageId: response.messageId!,
         photoUrl,
         isAnimated: isAnimatedMediaUrl(photoUrl),
         caption: formattedContent,
         buttons: response.buttons,
-      })
+      }) }
     }
     case 'editMessageCaption': {
       const result = await tg.editMessageCaption({
@@ -138,7 +140,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
         parseMode: 'HTML',
         ...buildReplyMarkup(response.buttons)
       })
-      return result === true ? response.messageId : result.id
+      return { messageId: result === true ? response.messageId : result.id }
     }
     case 'editMessageText': {
       const result = await tg.editMessageText({
@@ -148,7 +150,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
         parseMode: 'HTML',
         ...buildReplyMarkup(response.buttons)
       })
-      return result === true ? response.messageId : result.id
+      return { messageId: result === true ? response.messageId : result.id }
     }
     case 'sendPhoto': {
       const photoUrl = response.photoUrl!
@@ -162,7 +164,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
           ...buildReplyParameters(response.replyToMessageId, false),
           ...buildReplyMarkup(response.buttons)
         })
-        return msg.id
+        return { messageId: msg.id }
       }
       const msg = await tg.sendPhoto({
         chatId: response.chatId,
@@ -173,7 +175,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
         ...buildReplyParameters(response.replyToMessageId, true),
         ...buildReplyMarkup(response.buttons)
       })
-      return msg.id
+      return { messageId: msg.id }
     }
     case 'sendAnimation': {
       const animationUrl = response.photoUrl!
@@ -187,7 +189,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
           ...buildReplyParameters(response.replyToMessageId, false),
           ...buildReplyMarkup(response.buttons)
         })
-        return msg.id
+        return { messageId: msg.id }
       }
       try {
         const msg = await tg.sendAnimation({
@@ -199,7 +201,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
           ...buildReplyParameters(response.replyToMessageId, true),
           ...buildReplyMarkup(response.buttons)
         })
-        return msg.id
+        return { messageId: msg.id }
       } catch (e: any) {
         // real video (has audio) misclassified upstream as an animation - retry as sendVideo.
         if (!isRetriableAsVideo(e)) throw e
@@ -213,7 +215,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
           ...buildReplyParameters(response.replyToMessageId, true),
           ...buildReplyMarkup(response.buttons)
         })
-        return msg.id
+        return { messageId: msg.id }
       }
     }
     case 'sendVideo': {
@@ -228,7 +230,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
           ...buildReplyParameters(response.replyToMessageId, false),
           ...buildReplyMarkup(response.buttons)
         })
-        return msg.id
+        return { messageId: msg.id }
       }
       // same multipart reply_parameters quirk as sendPhoto/sendAnimation (see docs/agent/04-dbos.md)
       const msg = await tg.sendVideo({
@@ -240,12 +242,33 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
         ...buildReplyParameters(response.replyToMessageId, true),
         ...buildReplyMarkup(response.buttons)
       })
-      return msg.id
+      return { messageId: msg.id }
     }
     case 'sendAudio': {
+      const performer = response.audio?.performer
+      const title = response.audio?.title
+
+      const thumbnail = response.audio?.thumbnailUrl
+
+      if (response.audioFileId) {
+        const msg = await tg.sendAudio({
+          chatId: response.chatId,
+          messageThreadId: response.threadId,
+          audio: response.audioFileId,
+          caption: formattedContent,
+          parseMode: 'HTML',
+          performer,
+          title,
+          thumbnail,
+          ...buildReplyParameters(response.replyToMessageId, true),
+          ...buildReplyMarkup(response.buttons)
+        })
+        return { messageId: msg.id, telegramFileId: msg.audio?.id, telegramFileUniqueId: msg.audio?.uniqueId }
+      }
+
       const audioUrl = response.audioUrl!
-      if (!isValidHttpUrl(audioUrl)) {
-        warn('answerer', `sendAudio received invalid URL, falling back to sendMessage: ${audioUrl}`)
+      if (!isValidHttpUrl(audioUrl) && !audioUrl.startsWith('file://')) {
+        warn('answerer', `sendAudio received invalid reference, falling back to sendMessage: ${audioUrl}`)
         const msg = await tg.sendMessage({
           chatId: response.chatId,
           messageThreadId: response.threadId,
@@ -254,24 +277,34 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<str
           ...buildReplyParameters(response.replyToMessageId, false),
           ...buildReplyMarkup(response.buttons)
         })
-        return msg.id
+        return { messageId: msg.id }
       }
-      // Telegram ignores `performer`/`title` (and reliably parsing embedded tags/cover) when `audio`
-      // is passed as a remote URL - only a real multipart upload gets proper inline playback metadata.
-      const audioRes = await fetch(audioUrl)
-      const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+
+      // a URL-based `audio` drops performer/title/cover - only a real upload keeps them
+      let audioBuffer: Buffer
+      if (audioUrl.startsWith('file://')) {
+        const ref = parseMediaRef(audioUrl)
+        if (ref.kind !== 'file') throw new Error(`unreachable: ${audioUrl} parsed as non-file ref`)
+        // telegram-volume zero-copy send is deferred until the local bot-api server exists
+        audioBuffer = Buffer.from(await Bun.file(resolveFilePath(ref)).arrayBuffer())
+      } else {
+        const audioRes = await fetch(audioUrl)
+        audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+      }
+
       const msg = await tg.sendAudio({
         chatId: response.chatId,
         messageThreadId: response.threadId,
         audio: audioBuffer,
         caption: formattedContent,
         parseMode: 'HTML',
-        performer: response.audioPerformer,
-        title: response.audioTitle,
+        performer,
+        title,
+        thumbnail,
         ...buildReplyParameters(response.replyToMessageId, true),
         ...buildReplyMarkup(response.buttons)
       })
-      return msg.id
+      return { messageId: msg.id, telegramFileId: msg.audio?.id, telegramFileUniqueId: msg.audio?.uniqueId }
     }
     case 'deleteMessage':
       await tg.deleteMessage(response.chatId,

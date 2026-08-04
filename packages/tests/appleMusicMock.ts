@@ -27,6 +27,11 @@ mock.module("@syncfm/applemusic-api", () => ({
     Search = { search: async () => { if (state.shouldThrow) throw new Error('boom'); return state.searchResult } }
     Albums = { get: async () => { if (state.shouldThrow) throw new Error('boom'); return state.albumResult } }
     Songs = { get: async (params: any) => { state.lastSongParams = params; if (state.shouldThrow) throw new Error('boom'); return state.songResult } }
+    // stands in for rawGet()'s adapter-based auth-header capture
+    client = {
+      get: async (_url: string, opts?: { adapter?: (config: any) => Promise<any> }) =>
+        opts?.adapter?.({ headers: { toJSON: () => ({ Authorization: 'Bearer test-token' }) } }),
+    }
     async init() {}
   },
 }))
