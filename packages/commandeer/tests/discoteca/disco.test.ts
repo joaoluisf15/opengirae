@@ -1,15 +1,9 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { mockTelegram, bootstrapCommandeerWorkers, fakeCtx, TestFixtures, anyRarityId } from "@girae/tests";
 import { DiscotecaDB } from "@girae/database/discoteca";
-import { CardsDB } from "@girae/database/cards";
-import { EconomyDB } from "@girae/database/economy";
 import { db } from "@girae/database/index";
 import { discotecaEntries, userDiscoteca } from "@girae/database/schemas/discoteca";
-import { userCards } from "@girae/database/schemas/cards";
 import { and, eq } from "drizzle-orm";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import DiscoCommand, { resolveEntryMedia } from "../../commands/discoteca/disco";
 
 const { sentMessages } = mockTelegram();
@@ -56,185 +50,35 @@ describe("/disco", () => {
     expect(page?.content).toContain(`\`${artistUnownedId}\`. **${unownedName}** (0/1)`);
   });
 
-  test("with an argument matching an album: shows its linked singles and sends a photo", async () => {
-    const artistId = (await fx.discotecaArtist({ name: `Test Disco Album Artist ${Date.now()}` })).id;
-    const albumRow = await DiscotecaDB.createEntry({
-      name: `Test Disco Album ${Date.now()}`, artistId, appleMusicId: `test-disco-album-${Date.now()}`, type: 'album',
-      rarityId: await anyRarityId(),
-      artworkUrl: "https://example.com/art.jpg",
-      appleMusicUrl: "https://music.apple.com/us/album/test",
-    });
-    const albumId = albumRow!.id;
-    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, albumId)); });
-
-    const singleName = `Test Disco Linked Single ${Date.now()}`;
-    const singleRow = await DiscotecaDB.createEntry({
-      name: singleName, artistId, appleMusicId: `test-disco-linked-single-${Date.now()}`, type: 'single',
-      rarityId: await anyRarityId(),
-      albumId,
-    });
-    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, singleRow!.id)); });
-
-    const entry = await DiscotecaDB.getEntryWithDetails(albumId);
+  test("numeric arg resolves via the linked card id, sends the artist's banner", async () => {
+    const artist = await fx.discotecaArtist({ name: "Test Disco Card Artist" });
+    const cardId = (await fx.card({ name: `Test Disco Card ${Date.now()}` })).id;
+    await DiscotecaDB.setArtistCard(artist.id, cardId);
+    await DiscotecaDB.setArtistImage(artist.id, "https://example.com/artist-banner.jpg");
+    await fx.discotecaEntry({ name: "Test Disco Album", artistId: artist.id, type: 'album', rarityId: await anyRarityId() });
 
     sentMessages.length = 0;
-    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: [], platform: 'telegram' });
-    await DiscoCommand.execute(ctx, { query: entry! });
-    await new Promise(r => setTimeout(r, 1000));
-
-    const last = sentMessages[sentMessages.length - 1]!;
-    expect(last.method).toBe('sendPhoto');
-    const text = last.text ?? last.caption ?? '';
-    expect(text).toContain(singleName);
-    expect(text).toContain('💽');
-    expect(last.replyMarkup?.inline_keyboard?.[0]?.[0]?.url).toBe("https://music.apple.com/us/album/test");
-  });
-
-  test("with an argument matching an entry whose artist has a linked card: shows the card's category emoji, id and owned count", async () => {
-    const musicCategoryId = (await CardsDB.getCategoryByName('Música') ?? await CardsDB.createCategory('Música', '🎸'))!.id;
-    const subcategoryId = (await fx.subcategory({ categoryId: musicCategoryId, name: `Test Disco Sub ${Date.now()}` })).id;
-    const cardId = (await fx.card({ name: `Test Disco Card ${Date.now()}`, subcategoryId })).id;
-    fx.onCleanup(async () => { await db.delete(userCards).where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId))); });
-
-    const artistId = (await fx.discotecaArtist({ name: `Test Disco Carded Artist ${Date.now()}` })).id;
-    await DiscotecaDB.setArtistCard(artistId, cardId);
-    await CardsDB.addUserCard(userId, cardId, await EconomyDB.getIncomeInflationRate());
-
-    const entryId = (await fx.discotecaEntry({ artistId, type: 'single' })).id;
-    const entry = await DiscotecaDB.getEntryWithDetails(entryId);
-
-    sentMessages.length = 0;
-    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: [], platform: 'telegram' });
-    await DiscoCommand.execute(ctx, { query: entry! });
+    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: [String(cardId)], platform: 'telegram' });
+    await DiscoCommand.execute(ctx, { query: String(cardId) });
     await new Promise(r => setTimeout(r, 1000));
 
     const last = sentMessages[sentMessages.length - 1]!;
     const text = last.text ?? last.caption ?? '';
-    expect(text).toContain(`<code>${cardId}</code>`);
-    expect(text).toContain('x1');
+    expect(text).toContain('Test Disco Album');
+    expect(last.photo).toBe("https://example.com/artist-banner.jpg");
   });
 
-  test("with an argument matching an entry whose artist has a linked card the viewer doesn't own: no owned-count shown", async () => {
-    const musicCategoryId = (await CardsDB.getCategoryByName('Música') ?? await CardsDB.createCategory('Música', '🎸'))!.id;
-    const subcategoryId = (await fx.subcategory({ categoryId: musicCategoryId, name: `Test Disco Unowned Card Sub ${Date.now()}` })).id;
-    const cardId = (await fx.card({ name: `Test Disco Unowned Card ${Date.now()}`, subcategoryId })).id;
-
-    const artistId = (await fx.discotecaArtist({ name: `Test Disco Uncarded Artist ${Date.now()}` })).id;
-    await DiscotecaDB.setArtistCard(artistId, cardId);
-
-    const entryId = (await fx.discotecaEntry({ artistId, type: 'album' })).id;
-    const entry = await DiscotecaDB.getEntryWithDetails(entryId);
+  test("fuzzy name search resolves a unique match", async () => {
+    await fx.discotecaArtist({ name: "Test Disco Fuzzy Unique Artist" });
 
     sentMessages.length = 0;
-    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: [], platform: 'telegram' });
-    await DiscoCommand.execute(ctx, { query: entry! });
+    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: ['Fuzzy Unique'], platform: 'telegram' });
+    await DiscoCommand.execute(ctx, { query: 'Fuzzy Unique' });
     await new Promise(r => setTimeout(r, 1000));
 
     const last = sentMessages[sentMessages.length - 1]!;
     const text = last.text ?? last.caption ?? '';
-    expect(text).toContain(`<code>${cardId}</code>`);
-    expect(text).not.toContain('x0');
-  });
-
-  test("with an argument matching a single with a cached preview (file ref): sends audio with performer/title and caches the file_id", async () => {
-    const artistName = `Test Disco Single Artist ${Date.now()}`;
-    const artistId = (await fx.discotecaArtist({ name: artistName })).id;
-    const entryName = `Test Disco Single ${Date.now()}`;
-    const dir = await mkdtemp(join(tmpdir(), 'disco-test-scratch-'));
-    const prevScratch = process.env.SCRATCH_DIR;
-    process.env.SCRATCH_DIR = dir;
-    await Bun.write(join(dir, 'preview.m4a'), new Uint8Array([1, 2, 3]));
-
-    const entryRow = await DiscotecaDB.createEntry({
-      name: entryName, artistId, appleMusicId: `test-disco-single-${Date.now()}`, type: 'single',
-      rarityId: await anyRarityId(),
-      previewUrl: "file://scratch/preview.m4a",
-    });
-    fx.onCleanup(async () => {
-      await db.delete(discotecaEntries).where(eq(discotecaEntries.id, entryRow!.id));
-      process.env.SCRATCH_DIR = prevScratch;
-      await rm(dir, { recursive: true, force: true });
-    });
-
-    sentMessages.length = 0;
-    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: [], platform: 'telegram' });
-    await DiscoCommand.execute(ctx, { query: (await DiscotecaDB.getEntryWithDetails(entryRow!.id))! });
-    await new Promise(r => setTimeout(r, 1000));
-
-    const last = sentMessages[sentMessages.length - 1]!;
-    expect(last.method).toBe('sendAudio');
-    expect(last.performer).toBe(artistName);
-    expect(last.title).toBe(entryName);
-
-    // second view should now hit the cached file_id, not the scratch file
-    const updated = await DiscotecaDB.getEntryWithDetails(entryRow!.id);
-    expect(updated?.telegramFileId).toBeTruthy();
-
-    await rm(join(dir, 'preview.m4a'));
-    sentMessages.length = 0;
-    await DiscoCommand.execute(ctx, { query: updated! });
-    await new Promise(r => setTimeout(r, 1000));
-
-    const secondSend = sentMessages[sentMessages.length - 1]!;
-    expect(secondSend.method).toBe('sendAudio');
-    expect(secondSend.audio).toBe(updated!.telegramFileId);
-  });
-
-  test("with an argument matching a single with no cached preview: falls back to text, no audio call", async () => {
-    const artistId = (await fx.discotecaArtist()).id;
-    const entryId = (await fx.discotecaEntry({ artistId, type: 'single' })).id;
-    const entry = await DiscotecaDB.getEntryWithDetails(entryId);
-
-    sentMessages.length = 0;
-    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: [], platform: 'telegram' });
-    await DiscoCommand.execute(ctx, { query: entry! });
-    await new Promise(r => setTimeout(r, 1000));
-
-    const last = sentMessages[sentMessages.length - 1]!;
-    expect(last.method).toBe('sendMessage');
-  });
-
-  test("with an argument matching an entry with multiple genres: combines them into one italicized line", async () => {
-    const artistId = (await fx.discotecaArtist()).id;
-    const entryId = (await fx.discotecaEntry({ artistId, type: 'album' })).id;
-    const genreAId = (await fx.discotecaGenre({ name: `Alternativo ${Date.now()}` })).id;
-    const genreBId = (await fx.discotecaGenre({ name: `Pop ${Date.now()}` })).id;
-    const genreCId = (await fx.discotecaGenre({ name: `Rock ${Date.now()}` })).id;
-    const subAId = (await fx.discotecaSubcategory({ genreId: genreAId, isAlbum: true })).id;
-    const subBId = (await fx.discotecaSubcategory({ genreId: genreBId, isAlbum: true })).id;
-    const subCId = (await fx.discotecaSubcategory({ genreId: genreCId, isAlbum: true })).id;
-    await DiscotecaDB.setEntryGenres(entryId, [subAId, subBId, subCId]);
-    const entry = await DiscotecaDB.getEntryWithDetails(entryId);
-
-    sentMessages.length = 0;
-    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: [], platform: 'telegram' });
-    await DiscoCommand.execute(ctx, { query: entry! });
-    await new Promise(r => setTimeout(r, 1000));
-
-    const last = sentMessages[sentMessages.length - 1]!;
-    const text = last.text ?? last.caption ?? '';
-    expect(text).toMatch(/Álbuns de Alternativo \d+, Pop \d+, e Rock \d+/);
-  });
-
-  test("with an argument matching an album with an animated cover: sends it as an animation, not a static photo", async () => {
-    const artistId = (await fx.discotecaArtist({ name: `Test Disco Animated Artist ${Date.now()}` })).id;
-    const albumId = (await DiscotecaDB.createEntry({
-      name: `Test Disco Animated Album ${Date.now()}`, artistId, appleMusicId: `test-disco-animated-${Date.now()}`, type: 'album',
-      rarityId: await anyRarityId(),
-      artworkUrl: "https://example.com/static-art.jpg",
-      animatedArtworkUrl: "https://example.com/animated-art.mp4",
-    }))!.id;
-    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, albumId)); });
-    const entry = await DiscotecaDB.getEntryWithDetails(albumId);
-
-    sentMessages.length = 0;
-    const ctx = fakeCtx({ name: 'disco', authorId: userPlatformId, args: [], platform: 'telegram' });
-    await DiscoCommand.execute(ctx, { query: entry! });
-    await new Promise(r => setTimeout(r, 1000));
-
-    const last = sentMessages[sentMessages.length - 1]!;
-    expect(last.method).toBe('sendAnimation');
-    expect(last.animation).toBe('https://example.com/animated-art.mp4');
+    expect(text).toContain('Test Disco Fuzzy Unique Artist');
   });
 
   test("resolveEntryMedia: single with a preview, Telegram - sends audio", async () => {

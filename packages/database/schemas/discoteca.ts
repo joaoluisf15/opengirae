@@ -19,6 +19,7 @@ export const discotecaType = pgEnum("discoteca_type", ["single", "album"]);
 export const discotecaGenres = pgTable("discoteca_genres", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: text().notNull().unique(),
+  imageUrl: text(),
 });
 
 export const discotecaGenreAliases = pgTable("discoteca_genre_aliases", {
@@ -40,6 +41,7 @@ export const discotecaSubcategories = pgTable(
     name: text().notNull().unique(),
     emoji: text().notNull(),
     rarityModifier: integer().notNull().default(100),
+    imageUrl: text(),
   },
   (table) => [uniqueIndex("discoteca_subcategories_genre_is_album_idx").on(table.genreId, table.isAlbum)],
 );
@@ -51,9 +53,13 @@ export const discotecaArtists = pgTable(
     name: text().notNull(),
     appleMusicArtistId: text().notNull().unique(),
     cardId: integer().references(() => cards.id, { onDelete: "set null" }),
+    imageUrl: text(),
     createdAt: timestamp().notNull().defaultNow(),
   },
-  (table) => [index("discoteca_artists_card_idx").on(table.cardId)],
+  (table) => [
+    index("discoteca_artists_card_idx").on(table.cardId),
+    index("discoteca_artists_name_trgm_idx").using("gin", sql`immutable_unaccent(${table.name}) gin_trgm_ops`),
+  ],
 );
 
 export const discotecaEntries = pgTable(
@@ -86,6 +92,19 @@ export const discotecaEntries = pgTable(
     index("discoteca_entries_album_idx").on(table.albumId),
     index("discoteca_entries_artist_type_idx").on(table.artistId, table.type),
   ],
+);
+
+export const discotecaAlbumTracks = pgTable(
+  "discoteca_album_tracks",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    entryId: integer()
+      .notNull()
+      .references(() => discotecaEntries.id, { onDelete: "cascade" }),
+    trackAppleMusicId: text().notNull(),
+    name: text().notNull(),
+  },
+  (table) => [index("discoteca_album_tracks_entry_idx").on(table.entryId)],
 );
 
 export const discotecaEntrySubcategories = pgTable(

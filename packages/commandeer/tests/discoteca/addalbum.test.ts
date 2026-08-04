@@ -1,10 +1,10 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { mockTelegram, bootstrapCommandeerWorkers, fakeCtx, TestFixtures, mockAppleMusic } from "@girae/tests";
+import { mockTelegram, bootstrapCommandeerWorkers, fakeCtx, TestFixtures, mockAppleMusic, anyRarityId } from "@girae/tests";
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { CardsDB } from "@girae/database/cards";
 import { DiscotecaDB } from "@girae/database/discoteca";
 import { db } from "@girae/database/index";
-import { discotecaEntries, discotecaEntrySubcategories, discotecaGenreAliases, discotecaArtists } from "@girae/database/schemas/discoteca";
+import { discotecaEntries, discotecaEntrySubcategories, discotecaGenreAliases, discotecaArtists, discotecaAlbumTracks } from "@girae/database/schemas/discoteca";
 import { auditLogs } from "@girae/database/schemas/audit";
 import { eq } from "drizzle-orm";
 
@@ -83,6 +83,51 @@ describe("/addalbum", () => {
     // getRarities() has no ORDER BY - just confirm a real catalog rarity, not a specific position
     const rarities = await CardsDB.getRarities();
     expect(rarities.map(r => r.id)).toContain(entry.rarityId);
+
+    const trackRows = await db.select().from(discotecaAlbumTracks).where(eq(discotecaAlbumTracks.entryId, entry.id));
+    expect(trackRows.map(t => t.name)).toEqual(["Track One"]);
+    expect(trackRows[0]?.trackAppleMusicId).toBe("test-track-1");
+  }, 15000);
+
+  test("backfills a pre-existing unlinked single whose name matches a track on the new album", async () => {
+    const backfillArtistId = (await DiscotecaDB.getOrCreateArtist("test-artist-apple-id-backfill", "Test Backfill Artist"))!.id;
+    fx.onCleanup(async () => { await db.delete(discotecaArtists).where(eq(discotecaArtists.id, backfillArtistId)); });
+    const preexistingSingle = await DiscotecaDB.createEntry({
+      name: "Backfill Track", artistId: backfillArtistId, appleMusicId: `test-backfill-single-${Date.now()}`, type: 'single',
+      rarityId: await anyRarityId(),
+    });
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, preexistingSingle!.id)); });
+
+    const backfillAlbumAppleMusicId = `test-backfill-album-${Date.now()}`;
+    appleMusicState.searchResult = {
+      results: { albums: { data: [{ id: backfillAlbumAppleMusicId, attributes: { name: "Backfill Album", artistName: "Test Backfill Artist", artwork: { url: "https://example.com/{w}x{h}bb.{f}" }, releaseDate: "2024-01-01" } }] } },
+    };
+    appleMusicState.albumResult = {
+      data: [{
+        id: backfillAlbumAppleMusicId,
+        attributes: { name: "Backfill Album", artistName: "Test Backfill Artist", artwork: { url: "https://example.com/{w}x{h}bb.{f}" }, releaseDate: "2024-01-01", genreNames: [] },
+        relationships: {
+          tracks: { data: [{ id: "test-backfill-track-on-album", type: "songs", attributes: { name: "Backfill Track" } }] },
+          artists: { data: [{ id: "test-artist-apple-id-backfill", attributes: { name: "Test Backfill Artist" } }] },
+        },
+      }],
+    };
+
+    const workflowID = `test-addalbum-backfill-${Bun.randomUUIDv7()}`;
+    const runCtx = fakeCtx({ name: 'addalbum', authorId: staffPlatformId, args: ['test query'], platform: 'telegram', workflowID });
+    const handle = await DBOS.startWorkflow(AddAlbumCommand, { workflowID }).execute(runCtx, { query: 'test query' });
+
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { index: 0 } }, 'discoteca:pick');
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { action: 'confirm' } }, 'discoteca:confirm');
+    await handle.getResult();
+
+    const albumEntry = await db.select().from(discotecaEntries).where(eq(discotecaEntries.appleMusicId, backfillAlbumAppleMusicId)).then(r => r[0]);
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, albumEntry!.id)); });
+
+    const updatedSingle = await db.select().from(discotecaEntries).where(eq(discotecaEntries.id, preexistingSingle!.id)).then(r => r[0]);
+    expect(updatedSingle?.albumId).toBe(albumEntry!.id);
   }, 15000);
 
   test("warns on the confirm screen when the same album name already exists for this artist", async () => {
@@ -233,6 +278,40 @@ describe("/addalbum", () => {
 
     const genreRows = await db.select().from(discotecaEntrySubcategories).where(eq(discotecaEntrySubcategories.entryId, entry!.id));
     expect(genreRows.map(r => r.subcategoryId)).toEqual([kpopAlbumSubcategory.id]);
+  }, 15000);
+
+  test("Punk/Rock is exclusive: when mapped alongside other genres, only Punk/Rock is kept", async () => {
+    const rockAlbumSubcategory = await DiscotecaDB.getSubcategoryByName('Álbuns de Punk/Rock');
+    if (!rockAlbumSubcategory) throw new Error("expected the real seeded 'Álbuns de Punk/Rock' subcategory to exist");
+
+    const otherAlbumAppleMusicId = `test-album-rock-${Date.now()}`;
+    appleMusicState.searchResult = {
+      results: { albums: { data: [{ id: otherAlbumAppleMusicId, attributes: { name: "Rock Album", artistName: "Test Artist", artwork: { url: "https://example.com/{w}x{h}bb.{f}" }, releaseDate: "2024-01-01" } }] } },
+    };
+    appleMusicState.albumResult = {
+      data: [{
+        id: otherAlbumAppleMusicId,
+        // "Punk/Rock" resolves via the real seeded genre name; "Pop" resolves via this file's own overridden 'pop' alias
+        attributes: { name: "Rock Album", artistName: "Test Artist", artwork: { url: "https://example.com/{w}x{h}bb.{f}" }, releaseDate: "2024-01-01", genreNames: ["Punk/Rock", "Pop"] },
+        relationships: { tracks: { data: [] }, artists: { data: [{ id: "test-artist-apple-id", attributes: { name: "Test Artist" } }] } },
+      }],
+    };
+
+    const workflowID = `test-addalbum-rock-${Bun.randomUUIDv7()}`;
+    const runCtx = fakeCtx({ name: 'addalbum', authorId: staffPlatformId, args: ['test query'], platform: 'telegram', workflowID });
+    const handle = await DBOS.startWorkflow(AddAlbumCommand, { workflowID }).execute(runCtx, { query: 'test query' });
+
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { index: 0 } }, 'discoteca:pick');
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { action: 'confirm' } }, 'discoteca:confirm');
+    await handle.getResult();
+
+    const entry = await db.select().from(discotecaEntries).where(eq(discotecaEntries.appleMusicId, otherAlbumAppleMusicId)).then(r => r[0]);
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, entry!.id)); });
+
+    const genreRows = await db.select().from(discotecaEntrySubcategories).where(eq(discotecaEntrySubcategories.entryId, entry!.id));
+    expect(genreRows.map(r => r.subcategoryId)).toEqual([rockAlbumSubcategory.id]);
   }, 15000);
 
   test("adding/removing genres accepts a comma-separated list, toggling each independently", async () => {

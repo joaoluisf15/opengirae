@@ -99,6 +99,41 @@ describe.skipIf(!hasFfmpeg)("getOrProcessPreview writes to scratch, not S3", () 
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  test("a failed artwork fetch does not permanently poison the cache - a later call gets a fresh chance", async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'discoteca-scratch-test-'));
+    const prevScratch = process.env.SCRATCH_DIR;
+    process.env.SCRATCH_DIR = dir;
+    try {
+      const fixturesDir = await mkdtemp(join(tmpdir(), 'discoteca-fixtures-'));
+      const audio = await synthAudio(fixturesDir);
+      const originalFetch = fetch;
+      // first call: audio fetch succeeds, artwork fetch fails (non-200)
+      // @ts-expect-error bun-types declares fetch as a namespace, this reassignment is intentional
+      fetch = (async (url: string) => String(url).includes('artwork') ? new Response(null, { status: 500 }) : new Response(audio)) as unknown as typeof fetch;
+
+      const trackId = `test-artwork-fail-${Date.now()}`;
+      const track = {
+        appleMusicTrackId: trackId,
+        previewUrl: "https://irrelevant.invalid/preview.m4a",
+        title: "No Cover Yet",
+        artistName: "Test Artist",
+        artwork: { url: "https://irrelevant.invalid/artwork/{w}x{h}bb.{f}" },
+      };
+      const firstResult = await getOrProcessPreview(track);
+      expect(firstResult).toMatch(/^file:\/\/scratch\//);
+
+      const cachedAfterFailure = await DiscotecaDB.getPreviewCacheEntry(trackId);
+      expect(cachedAfterFailure).toBeUndefined();
+
+      // @ts-expect-error bun-types declares fetch as a namespace, this reassignment is intentional
+      fetch = originalFetch;
+      await rm(fixturesDir, { recursive: true, force: true });
+    } finally {
+      process.env.SCRATCH_DIR = prevScratch;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("getOrProcessPreview cache hit", () => {

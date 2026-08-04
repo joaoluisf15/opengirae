@@ -12,6 +12,7 @@ const OPTION_TYPE_MAP: Record<CommandArgumentType, ApplicationCommandOptionTypes
   [CommandArgumentType.DISCOTECA_GENRE]: ApplicationCommandOptionTypes.String,
   [CommandArgumentType.DISCOTECA_SUBCATEGORY]: ApplicationCommandOptionTypes.String,
   [CommandArgumentType.DISCOTECA_ENTRY]: ApplicationCommandOptionTypes.String,
+  [CommandArgumentType.DISCOTECA_ARTIST]: ApplicationCommandOptionTypes.String,
   [CommandArgumentType.VANITY_ITEM]: ApplicationCommandOptionTypes.String,
   [CommandArgumentType.STRING]: ApplicationCommandOptionTypes.String,
   [CommandArgumentType.HEX_COLOR]: ApplicationCommandOptionTypes.String,

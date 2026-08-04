@@ -76,12 +76,14 @@ export async function getOrProcessPreview(track: PreviewTagData): Promise<string
     if (!audioRes.ok) throw new Error(`preview audio fetch failed: ${audioRes.status}`);
 
     const audioBytes = new Uint8Array(await audioRes.arrayBuffer());
+    const artworkFailed = !!artworkUrl && !artworkRes?.ok;
     const artworkBytes = artworkRes?.ok ? new Uint8Array(await artworkRes.arrayBuffer()) : undefined;
+    if (artworkFailed) warn('apple-music', `getOrProcessPreview(${track.appleMusicTrackId}): artwork fetch failed (${artworkRes?.status}), tagging without cover and skipping the permanent cache`);
 
     const taggedBytes = await tagPreviewAudio(audioBytes, artworkBytes, track);
 
     const mediaRef = await writeScratchFile(`discoteca-previews/${Bun.randomUUIDv7()}.m4a`, taggedBytes);
-    await DiscotecaDB.setPreviewCacheEntry(track.appleMusicTrackId, mediaRef);
+    if (!artworkFailed) await DiscotecaDB.setPreviewCacheEntry(track.appleMusicTrackId, mediaRef);
     return mediaRef;
   } catch (e) {
     warn('apple-music', `getOrProcessPreview(${track.appleMusicTrackId}) failed: ${e}`);

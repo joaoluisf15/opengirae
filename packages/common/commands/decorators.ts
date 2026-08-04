@@ -5,6 +5,7 @@ export enum CommandArgumentType {
   DISCOTECA_GENRE = 'DISCOTECA_GENRE',
   DISCOTECA_SUBCATEGORY = 'DISCOTECA_SUBCATEGORY',
   DISCOTECA_ENTRY = 'DISCOTECA_ENTRY',
+  DISCOTECA_ARTIST = 'DISCOTECA_ARTIST',
   VANITY_ITEM = 'VANITY_ITEM',
   USER_MENTION = 'USER_MENTION',
   NUMBER = 'NUMBER',
@@ -25,7 +26,8 @@ export type CommandArgumentSpec<T = any> =
   // showBasePrice: true for admin commands (editbg/delbg/etc.), which must see the raw catalog price
   | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.VANITY_ITEM; vanityType: 'background' | 'sticker'; showBasePrice?: boolean })
   | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.DISCOTECA_ENTRY; entryType?: 'album' | 'single' })
-  | (BaseCommandArgumentSpec<T> & { type: Exclude<CommandArgumentType, CommandArgumentType.VANITY_ITEM | CommandArgumentType.DISCOTECA_ENTRY> });
+  | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.DISCOTECA_SUBCATEGORY; subcategoryType?: 'album' | 'single' })
+  | (BaseCommandArgumentSpec<T> & { type: Exclude<CommandArgumentType, CommandArgumentType.VANITY_ITEM | CommandArgumentType.DISCOTECA_ENTRY | CommandArgumentType.DISCOTECA_SUBCATEGORY> });
 
 export function CommandArgument(specs: CommandArgumentSpec[]) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {

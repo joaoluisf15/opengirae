@@ -35,7 +35,7 @@ describe("/genrealias", () => {
   test("maps a raw alias (with spaces) onto the genre, normalized to lowercase", async () => {
     const alias = "K-Pop Raw String";
     const ctx = fakeCtx({ name: 'genrealias', authorId: staffPlatformId, args: [genreName, alias], platform: 'telegram' });
-    await GenreAliasCommand.execute(ctx, { genre: { id: genreId, name: genreName }, alias });
+    await GenreAliasCommand.execute(ctx, { genre: { id: genreId, name: genreName, imageUrl: null }, alias });
 
     const row = await db.select().from(discotecaGenreAliases).where(eq(discotecaGenreAliases.alias, alias.toLowerCase())).then(r => r[0]);
     expect(row?.genreId).toBe(genreId);

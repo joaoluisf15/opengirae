@@ -7,11 +7,12 @@ import {
   discotecaEntrySubcategories,
   discotecaPreviewCache,
   discotecaArtists,
+  discotecaAlbumTracks,
   userDiscoteca,
 } from "./schemas/discoteca";
 import { userProfiles } from "./schemas/users";
 import { cards, categories, subcategories, cardSubcategories, rarities } from "./schemas/cards";
-import { eq, and, or, sql, gt } from "drizzle-orm";
+import { eq, and, or, sql, gt, isNull, inArray } from "drizzle-orm";
 
 export interface CreateDiscotecaEntryData {
   name: string;
@@ -45,6 +46,10 @@ export class DiscotecaDB {
     return await client.select().from(discotecaGenres);
   })
 
+  static setGenreImage = maybeTransaction('setGenreImage', async (client, genreId: number, imageUrl: string) => {
+    await client.update(discotecaGenres).set({ imageUrl }).where(eq(discotecaGenres.id, genreId));
+  })
+
   static upsertGenreAlias = maybeTransaction('upsertGenreAlias', async (client, alias: string, genreId: number) => {
     const normalized = alias.trim().toLowerCase();
     return await client
@@ -57,6 +62,10 @@ export class DiscotecaDB {
 
   static createSubcategory = maybeTransaction('createSubcategory', async (client, genreId: number, name: string, emoji: string, isAlbum: boolean) => {
     return await client.insert(discotecaSubcategories).values({ genreId, name, emoji, isAlbum }).returning().then(a => a?.[0]);
+  })
+
+  static setSubcategoryImage = maybeTransaction('setSubcategoryImage', async (client, subcategoryId: number, imageUrl: string) => {
+    await client.update(discotecaSubcategories).set({ imageUrl }).where(eq(discotecaSubcategories.id, subcategoryId));
   })
 
   static getSubcategory = maybeTransaction('getSubcategory', async (client, id: number) => {
@@ -178,8 +187,14 @@ export class DiscotecaDB {
       .orderBy(rarities.weight, discotecaEntries.name);
   })
 
-  static getEntriesForGenre = maybeTransaction('getEntriesForGenre', async (client, subcategoryId: number, userId: number, limit: number, offset: number) => {
-    const [rows, totalRow, ownedRow] = await Promise.all([
+  static getEntriesForGenre = maybeTransaction('getEntriesForGenre', async (client, subcategoryId: number, userId: number, limit: number, offset: number, filters: { ownedFilter?: 'owned' | 'missing'; rarityNames?: string[] } = {}) => {
+    const ownedCondition = filters.ownedFilter === 'owned' ? gt(userDiscoteca.count, 0)
+      : filters.ownedFilter === 'missing' ? isNull(userDiscoteca.count)
+      : undefined
+    const rarityCondition = filters.rarityNames && filters.rarityNames.length > 0 ? inArray(rarities.name, filters.rarityNames) : undefined
+    const filteredWhere = and(eq(discotecaEntrySubcategories.subcategoryId, subcategoryId), ownedCondition, rarityCondition)
+
+    const [rows, totalRow, ownedRow, filteredTotalRow] = await Promise.all([
       client
         .select({
           id: discotecaEntries.id,
@@ -199,7 +214,7 @@ export class DiscotecaDB {
         .leftJoin(cardSubcategories, and(eq(cardSubcategories.cardId, cards.id), eq(cardSubcategories.isMain, true)))
         .leftJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
         .leftJoin(categories, eq(categories.id, subcategories.categoryId))
-        .where(eq(discotecaEntrySubcategories.subcategoryId, subcategoryId))
+        .where(filteredWhere)
         .orderBy(rarities.weight, discotecaEntries.name)
         .limit(limit)
         .offset(offset),
@@ -210,12 +225,26 @@ export class DiscotecaDB {
         .innerJoin(userDiscoteca, and(eq(userDiscoteca.entryId, discotecaEntrySubcategories.entryId), eq(userDiscoteca.userId, userId), gt(userDiscoteca.count, 0)))
         .where(eq(discotecaEntrySubcategories.subcategoryId, subcategoryId))
         .then(a => a?.[0]),
+      client
+        .select({ total: sql<number>`count(*)::int` })
+        .from(discotecaEntrySubcategories)
+        .innerJoin(discotecaEntries, eq(discotecaEntries.id, discotecaEntrySubcategories.entryId))
+        .innerJoin(rarities, eq(rarities.id, discotecaEntries.rarityId))
+        .leftJoin(userDiscoteca, and(eq(userDiscoteca.entryId, discotecaEntries.id), eq(userDiscoteca.userId, userId)))
+        .where(filteredWhere)
+        .then(a => a?.[0]),
     ]);
-    return { rows, total: totalRow?.total ?? 0, owned: ownedRow?.owned ?? 0 };
+    return { rows, total: totalRow?.total ?? 0, owned: ownedRow?.owned ?? 0, filteredTotal: filteredTotalRow?.total ?? 0 };
   })
 
-  static getEntriesByType = maybeTransaction('getEntriesByType', async (client, type: 'single' | 'album', userId: number, limit: number, offset: number) => {
-    const [rows, totalRow, ownedRow] = await Promise.all([
+  static getEntriesByType = maybeTransaction('getEntriesByType', async (client, type: 'single' | 'album', userId: number, limit: number, offset: number, filters: { ownedFilter?: 'owned' | 'missing'; rarityNames?: string[] } = {}) => {
+    const ownedCondition = filters.ownedFilter === 'owned' ? gt(userDiscoteca.count, 0)
+      : filters.ownedFilter === 'missing' ? isNull(userDiscoteca.count)
+      : undefined
+    const rarityCondition = filters.rarityNames && filters.rarityNames.length > 0 ? inArray(rarities.name, filters.rarityNames) : undefined
+    const filteredWhere = and(eq(discotecaEntries.type, type), ownedCondition, rarityCondition)
+
+    const [rows, totalRow, ownedRow, filteredTotalRow] = await Promise.all([
       client
         .select({
           id: discotecaEntries.id,
@@ -233,7 +262,7 @@ export class DiscotecaDB {
         .leftJoin(cardSubcategories, and(eq(cardSubcategories.cardId, cards.id), eq(cardSubcategories.isMain, true)))
         .leftJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
         .leftJoin(categories, eq(categories.id, subcategories.categoryId))
-        .where(eq(discotecaEntries.type, type))
+        .where(filteredWhere)
         .orderBy(rarities.weight, discotecaEntries.name)
         .limit(limit)
         .offset(offset),
@@ -244,8 +273,15 @@ export class DiscotecaDB {
         .innerJoin(discotecaEntries, eq(discotecaEntries.id, userDiscoteca.entryId))
         .where(and(eq(discotecaEntries.type, type), eq(userDiscoteca.userId, userId), gt(userDiscoteca.count, 0)))
         .then(a => a?.[0]),
+      client
+        .select({ total: sql<number>`count(*)::int` })
+        .from(discotecaEntries)
+        .innerJoin(rarities, eq(rarities.id, discotecaEntries.rarityId))
+        .leftJoin(userDiscoteca, and(eq(userDiscoteca.entryId, discotecaEntries.id), eq(userDiscoteca.userId, userId)))
+        .where(filteredWhere)
+        .then(a => a?.[0]),
     ]);
-    return { rows, total: totalRow?.total ?? 0, owned: ownedRow?.owned ?? 0 };
+    return { rows, total: totalRow?.total ?? 0, owned: ownedRow?.owned ?? 0, filteredTotal: filteredTotalRow?.total ?? 0 };
   })
 
   static getOverallCounts = maybeTransaction('getOverallCounts', async (client, userId: number) => {
@@ -268,16 +304,17 @@ export class DiscotecaDB {
     const existing = await client.select().from(discotecaArtists).where(eq(discotecaArtists.appleMusicArtistId, appleMusicArtistId)).limit(1).then(a => a?.[0]);
     if (existing) return existing;
 
-    const musicCategory = await client.select({ id: categories.id }).from(categories).where(eq(categories.name, 'Música')).limit(1).then(a => a?.[0]);
+    // artist cards can be filed under either the general music category or the girasia (idol) one
+    const musicCategories = await client.select({ id: categories.id }).from(categories).where(inArray(categories.name, ['Música', 'GIRÁSIA']));
 
     let cardId: number | undefined;
-    if (musicCategory) {
+    if (musicCategories.length > 0) {
       const matches = await client
         .select({ id: cards.id })
         .from(cards)
         .innerJoin(cardSubcategories, eq(cardSubcategories.cardId, cards.id))
         .innerJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
-        .where(and(eq(subcategories.categoryId, musicCategory.id), sql`immutable_unaccent(${cards.name}) = immutable_unaccent(${name})`));
+        .where(and(inArray(subcategories.categoryId, musicCategories.map(c => c.id)), sql`immutable_unaccent(${cards.name}) = immutable_unaccent(${name})`));
       if (matches.length === 1) cardId = matches[0]!.id;
     }
 
@@ -293,12 +330,29 @@ export class DiscotecaDB {
     return await client.select().from(discotecaArtists).where(eq(discotecaArtists.appleMusicArtistId, appleMusicArtistId)).limit(1).then(a => a?.[0]);
   })
 
-  static setArtistCard = maybeTransaction('setArtistCard', async (client, artistId: number, cardId: number | null) => {
-    return await client.update(discotecaArtists).set({ cardId }).where(eq(discotecaArtists.id, artistId)).returning().then(a => a?.[0]);
+  static setArtistCard = maybeTransaction('setArtistCard', async (client, artistId: number, cardId: number | null, cardName?: string) => {
+    return await client.update(discotecaArtists).set(cardName ? { cardId, name: cardName } : { cardId }).where(eq(discotecaArtists.id, artistId)).returning().then(a => a?.[0]);
   })
 
   static getArtist = maybeTransaction('getArtist', async (client, id: number) => {
     return await client.select().from(discotecaArtists).where(eq(discotecaArtists.id, id)).limit(1).then(a => a?.[0]);
+  })
+
+  static getArtistByCardId = maybeTransaction('getArtistByCardId', async (client, cardId: number) => {
+    return await client.select().from(discotecaArtists).where(eq(discotecaArtists.cardId, cardId)).limit(1).then(a => a?.[0]);
+  })
+
+  static setArtistImage = maybeTransaction('setArtistImage', async (client, artistId: number, imageUrl: string) => {
+    await client.update(discotecaArtists).set({ imageUrl }).where(eq(discotecaArtists.id, artistId));
+  })
+
+  // WHERE expression must match discoteca_artists_name_trgm_idx's expression exactly for the index to be used
+  static searchArtistsByName = maybeTransaction('searchArtistsByName', async (client, query: string, limit: number = 100) => {
+    return await client
+      .select({ id: discotecaArtists.id, name: discotecaArtists.name })
+      .from(discotecaArtists)
+      .where(sql`immutable_unaccent(${discotecaArtists.name}) ilike immutable_unaccent(${'%' + query + '%'})`)
+      .limit(limit);
   })
 
   static getUserDiscoteca = maybeTransaction('getUserDiscoteca', async (client, userId: number, entryId: number) => {
@@ -320,6 +374,23 @@ export class DiscotecaDB {
         .then(a => a?.[0]),
     ]);
     return { owned: ownedRow?.owned ?? 0, total: totalRow?.total ?? 0 };
+  })
+
+  static getEntriesForArtist = maybeTransaction('getEntriesForArtist', async (client, artistId: number, userId: number) => {
+    return await client
+      .select({
+        id: discotecaEntries.id,
+        name: discotecaEntries.name,
+        type: discotecaEntries.type,
+        rarityEmoji: rarities.emoji,
+        rarityName: rarities.name,
+        ownedCount: sql<number>`coalesce(${userDiscoteca.count}, 0)::int`,
+      })
+      .from(discotecaEntries)
+      .innerJoin(rarities, eq(rarities.id, discotecaEntries.rarityId))
+      .leftJoin(userDiscoteca, and(eq(userDiscoteca.entryId, discotecaEntries.id), eq(userDiscoteca.userId, userId)))
+      .where(eq(discotecaEntries.artistId, artistId))
+      .orderBy(discotecaEntries.type, rarities.weight, discotecaEntries.name);
   })
 
   static getArtistsPage = maybeTransaction('getArtistsPage', async (client, userId: number, limit: number, offset: number) => {
@@ -375,6 +446,47 @@ export class DiscotecaDB {
         eq(discotecaEntries.artistId, artistId),
         eq(discotecaEntries.type, type),
         sql`immutable_unaccent(lower(${discotecaEntries.name})) = immutable_unaccent(lower(${name}))`,
+      ))
+      .limit(1)
+      .then(a => a?.[0]);
+  })
+
+  static getAlbumsByArtist = maybeTransaction('getAlbumsByArtist', async (client, artistId: number) => {
+    return await client
+      .select({ id: discotecaEntries.id, appleMusicId: discotecaEntries.appleMusicId })
+      .from(discotecaEntries)
+      .where(and(eq(discotecaEntries.artistId, artistId), eq(discotecaEntries.type, 'album')));
+  })
+
+  static getUnlinkedSinglesByArtist = maybeTransaction('getUnlinkedSinglesByArtist', async (client, artistId: number) => {
+    return await client
+      .select({ id: discotecaEntries.id, name: discotecaEntries.name })
+      .from(discotecaEntries)
+      .where(and(eq(discotecaEntries.artistId, artistId), eq(discotecaEntries.type, 'single'), isNull(discotecaEntries.albumId)));
+  })
+
+  static linkSingleToAlbum = maybeTransaction('linkSingleToAlbum', async (client, entryId: number, albumId: number) => {
+    await client.update(discotecaEntries).set({ albumId }).where(eq(discotecaEntries.id, entryId));
+  })
+
+  static updateEntry = maybeTransaction('updateEntry', async (client, id: number, data: { name: string; rarityId: number; albumId?: number | null }) => {
+    return await client.update(discotecaEntries).set(data).where(eq(discotecaEntries.id, id)).returning().then(a => a?.[0]);
+  })
+
+  static cacheAlbumTracks = maybeTransaction('cacheAlbumTracks', async (client, entryId: number, tracks: { trackAppleMusicId: string; name: string }[]) => {
+    if (tracks.length === 0) return;
+    await client.insert(discotecaAlbumTracks).values(tracks.map(t => ({ entryId, trackAppleMusicId: t.trackAppleMusicId, name: t.name })));
+  })
+
+  static findAlbumTrackMatch = maybeTransaction('findAlbumTrackMatch', async (client, artistId: number, trackName: string) => {
+    return await client
+      .select({ id: discotecaEntries.id, name: discotecaEntries.name })
+      .from(discotecaAlbumTracks)
+      .innerJoin(discotecaEntries, eq(discotecaEntries.id, discotecaAlbumTracks.entryId))
+      .where(and(
+        eq(discotecaEntries.artistId, artistId),
+        eq(discotecaEntries.type, 'album'),
+        sql`lower(trim(${discotecaAlbumTracks.name})) = lower(trim(${trackName}))`,
       ))
       .limit(1)
       .then(a => a?.[0]);

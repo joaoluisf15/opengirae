@@ -73,6 +73,6 @@ describe("/generos", () => {
 
     const last = sentMessages[sentMessages.length - 1]!;
     const text = last.text ?? last.caption ?? '';
-    expect(text).toContain('Nenhum álbum ou single neste gênero ainda');
+    expect(text).toContain('Nada para mostrar com esses filtros');
   });
 });

@@ -11,7 +11,7 @@ import { getAlbum, getSong } from '@girae/services/apple-music/resource'
 import { getOrProcessPreview } from '@girae/services/apple-music/preview'
 import { getOrProcessAnimatedCover } from '@girae/services/apple-music/resource'
 import { inferDiscotecaRarity } from './discotecaInference'
-import { resolveCardByIdOrName } from '../commandArguments'
+import { resolveCardByIdOrName, resolveDiscotecaAlbumByIdOrName } from '../commandArguments'
 import type { IncomingCommand } from '@girae/common/commands/types'
 
 const PICK_EVENT = 'discoteca:pick'
@@ -19,6 +19,7 @@ const CONFIRM_EVENT = 'discoteca:confirm'
 const NAME_EVENT = 'discoteca:name'
 const ADD_GENRE_EVENT = 'discoteca:addGenre'
 const ARTIST_CARD_EVENT = 'discoteca:artistCard'
+const ALBUM_EVENT = 'discoteca:album'
 const MAX_CANDIDATES_SHOWN = 8
 
 type PickAction = { index: number }
@@ -28,19 +29,33 @@ type ConfirmAction =
   | { action: 'recheckGenres' }
   | { action: 'addGenre' }
   | { action: 'linkArtistCard' }
+  | { action: 'changeAlbum' }
   | { action: 'confirm' }
   | { action: 'cancel' }
 type Rarity = { id: number; name: string; emoji: string }
 type ResolvedGenres = Awaited<ReturnType<typeof DiscotecaDB.resolveGenresByAliases>>
 type Artist = { id: number; name: string; cardId: number | null }
+type AlbumOption = { id: number; name: string } | null
 
 function stripGenericMusicGenre(genreNames: string[]): string[] {
   return genreNames.filter(g => g.trim().toLowerCase() !== 'music')
 }
 
-function enforceKpopExclusivity(genres: ResolvedGenres): ResolvedGenres {
-  const kpop = genres.resolved.find(g => g.name.toLowerCase().includes('k-pop'))
-  return kpop ? { resolved: [kpop], unmapped: genres.unmapped } : genres
+// subcategories ending in "-pop" (K-Pop, J-Pop, C-Pop, V-Pop, Thai-Pop, ...) and Punk/Rock are mutually
+// exclusive with everything else - a track is either firmly in one of them or not
+const EXCLUSIVE_GENRE_MARKERS = ['punk/rock']
+const EXCLUSIVE_GENRE_SUFFIX = '-pop'
+
+function enforceExclusiveGenres(genres: ResolvedGenres): ResolvedGenres {
+  const exclusive = genres.resolved.find(g => {
+    const lower = g.name.toLowerCase()
+    return lower.endsWith(EXCLUSIVE_GENRE_SUFFIX) || EXCLUSIVE_GENRE_MARKERS.some(marker => lower.includes(marker))
+  })
+  return exclusive ? { resolved: [exclusive], unmapped: genres.unmapped } : genres
+}
+
+function normalizeTrackName(name: string | undefined): string {
+  return (name ?? '').trim().toLowerCase()
 }
 
 export async function runAddFlow(ctx: IncomingCommand, resourceType: 'single' | 'album', query: string): Promise<void> {
@@ -84,40 +99,48 @@ async function runConfirmLoop(
   ctx: IncomingCommand,
   messageId: string | undefined,
   photoUrl: string | undefined,
-  buildPreview: (name: string, rarityName: string, rarityEmoji: string, genres: ResolvedGenres, artist: Artist) => Promise<string>,
+  buildPreview: (name: string, rarityName: string, rarityEmoji: string, genres: ResolvedGenres, artist: Artist, album: AlbumOption) => Promise<string>,
   initialName: string,
   initialRarityName: string,
   rarities: Rarity[],
   initialGenres: ResolvedGenres,
-  reresolveGenres: () => Promise<ResolvedGenres>,
+  reresolveGenres: (() => Promise<ResolvedGenres>) | undefined,
   resolveGenre: (raw: string) => Promise<{ id: number; name: string } | null>,
   initialArtist: Artist,
-): Promise<{ name: string; rarityId: number; genres: ResolvedGenres; artist: Artist; messageId?: string } | null> {
+  initialAlbum: AlbumOption,
+  showAlbumButton: boolean,
+): Promise<{ name: string; rarityId: number; genres: ResolvedGenres; artist: Artist; album: AlbumOption; messageId?: string } | null> {
   let name = initialName
   let rarityName = initialRarityName
   let genres = initialGenres
   let artist = initialArtist
+  let album = initialAlbum
   let currentMessageId = messageId
 
   while (true) {
     const rarity = rarities.find(r => r.name === rarityName) ?? rarities[0]!
-    const options = [
+    const options: { title: string; data: ConfirmAction }[] = [
       ...rarities.map(r => ({ title: `${r.emoji} ${r.name}`, data: { action: 'rarity', value: r.name } as ConfirmAction })),
       { title: '✏️ Nome', data: { action: 'editName' } as ConfirmAction },
-      { title: '🔁 Rever gêneros', data: { action: 'recheckGenres' } as ConfirmAction },
-      { title: '➕ Adicionar/remover gênero', data: { action: 'addGenre' } as ConfirmAction },
+    ]
+    const genreButtons: { title: string; data: ConfirmAction }[] = []
+    if (reresolveGenres) genreButtons.push({ title: '🔁 Rever gêneros', data: { action: 'recheckGenres' } as ConfirmAction })
+    genreButtons.push({ title: '➕ Adicionar/remover gênero', data: { action: 'addGenre' } as ConfirmAction })
+    options.push(...genreButtons)
+    if (showAlbumButton) options.push({ title: '🔄 Trocar álbum', data: { action: 'changeAlbum' } as ConfirmAction })
+    options.push(
       { title: '🎴 Vincular card do artista', data: { action: 'linkArtistCard' } as ConfirmAction },
       { title: '✅ Salvar', data: { action: 'confirm' } as ConfirmAction },
       { title: '❌ Cancelar', data: { action: 'cancel' } as ConfirmAction },
-    ]
+    )
 
     await reply(ctx, {
-      content: await buildPreview(name, rarity.name, rarity.emoji, genres, artist),
+      content: await buildPreview(name, rarity.name, rarity.emoji, genres, artist, album),
       photoUrl,
       eventName: CONFIRM_EVENT,
       restricted: 'author',
       options,
-      rows: [rarities.length, 1, 1, 1, 1, 1, 1],
+      rows: [rarities.length, 1, genreButtons.length, ...(showAlbumButton ? [1] : []), 1, 1, 1],
       editMessageId: currentMessageId,
     })
 
@@ -138,7 +161,7 @@ async function runConfirmLoop(
       if (textReply?.value?.trim()) name = textReply.value.trim()
       continue
     }
-    if (selection.value.action === 'recheckGenres') { genres = await reresolveGenres(); continue }
+    if (selection.value.action === 'recheckGenres') { if (reresolveGenres) genres = await reresolveGenres(); continue }
     if (selection.value.action === 'addGenre') {
       await reply(ctx, 'Envie o(s) nome(s) do(s) gênero(s) a adicionar ou remover, separados por vírgula (precisam já existir no catálogo).')
       await awaitTextReply(ctx, ADD_GENRE_EVENT)
@@ -167,16 +190,36 @@ async function runConfirmLoop(
       if (raw) {
         const cardOutcome = await resolveCardByIdOrName(raw)
         if (cardOutcome.ok) {
-          const card = cardOutcome.value as { id: number }
-          await DiscotecaDB.setArtistCard(artist.id, card.id)
-          artist = { ...artist, cardId: card.id }
+          const card = cardOutcome.value as { id: number; name: string }
+          await DiscotecaDB.setArtistCard(artist.id, card.id, card.name)
+          artist = { ...artist, cardId: card.id, name: card.name }
         } else if (cardOutcome.message) {
           await reply(ctx, cardOutcome.message)
         }
       }
       continue
     }
-    if (selection.value.action === 'confirm') return { name, rarityId: rarity.id, genres, artist, messageId: currentMessageId }
+    if (selection.value.action === 'changeAlbum') {
+      await reply(ctx, 'Envie o ID ou nome do álbum a vincular, ou "nenhum" para remover o vínculo.')
+      await awaitTextReply(ctx, ALBUM_EVENT)
+      const textReply = await DBOS.recv<{ value: string }>(ALBUM_EVENT)
+      const raw = textReply?.value?.trim()
+      if (raw) {
+        if (raw.toLowerCase() === 'nenhum') {
+          album = null
+        } else {
+          const albumOutcome = await resolveDiscotecaAlbumByIdOrName(raw)
+          if (albumOutcome.ok) {
+            const picked = albumOutcome.value as { id: number; name: string }
+            album = { id: picked.id, name: picked.name }
+          } else if (albumOutcome.message) {
+            await reply(ctx, albumOutcome.message)
+          }
+        }
+      }
+      continue
+    }
+    if (selection.value.action === 'confirm') return { name, rarityId: rarity.id, genres, artist, album, messageId: currentMessageId }
   }
 }
 
@@ -217,24 +260,34 @@ async function runResourceConfirm(ctx: IncomingCommand, candidate: AppleMusicSea
   const duplicate = await DiscotecaDB.findDuplicateEntry(attrs.name ?? candidate.name, artist.id, type)
 
   const genreNames = stripGenericMusicGenre(attrs.genreNames ?? [])
-  const initialGenres = enforceKpopExclusivity(await DiscotecaDB.resolveGenresByAliases(genreNames, isAlbum))
+  const initialGenres = enforceExclusiveGenres(await DiscotecaDB.resolveGenresByAliases(genreNames, isAlbum))
   const suggestedRarity = await inferDiscotecaRarity(attrs.name ?? candidate.name, artist.name, type, rarities.map(r => r.name))
   const artworkUrl = resolveArtworkUrl(attrs.artwork, 1000)
 
-  const buildPreview = async (name: string, rarityName: string, rarityEmoji: string, genres: ResolvedGenres, artist: Artist) => {
+  const buildPreview = async (name: string, rarityName: string, rarityEmoji: string, genres: ResolvedGenres, artist: Artist, album: AlbumOption) => {
     const genresLine = genres.resolved.length > 0 ? genres.resolved.map(g => escapeMarkdown(g.name)).join(', ') : '_nenhum gênero mapeado_'
     const unmappedWarning = genres.unmapped.length > 0 ? `\n⚠️ Gêneros não mapeados: ${genres.unmapped.map(escapeMarkdown).join(', ')}` : ''
     const duplicateWarning = duplicate ? `\n⚠️ Já existe um ${typeLabel} de **${escapeMarkdown(artist.name)}** com esse nome: \`${duplicate.id}\`. **${escapeMarkdown(duplicate.name)}**` : ''
     const artistLine = await artistCardLine(artist)
-    return `${typeEmoji} **${escapeMarkdown(name)}**\n${escapeMarkdown(artist.name)}\n\n🎼 ${genresLine}${unmappedWarning}\n${artistLine}\n${rarityEmoji} ${escapeMarkdown(rarityName)}${duplicateWarning}`
+    const albumLine = !isAlbum ? (album ? `\n💽 Álbum sugerido: \`${album.id}\`. **${escapeMarkdown(album.name)}**` : `\n💽 Nenhum álbum vinculado.`) : ''
+    return `${typeEmoji} **${escapeMarkdown(name)}**\n${escapeMarkdown(artist.name)}\n\n🎼 ${genresLine}${unmappedWarning}\n${artistLine}${albumLine}\n${rarityEmoji} ${escapeMarkdown(rarityName)}${duplicateWarning}`
+  }
+
+  let initialAlbum: AlbumOption = null
+  if (!isAlbum) {
+    const songDetail = detail as SongsEndpointTypes.SongResource
+    const albumAppleMusicId = songDetail.relationships?.albums?.data?.[0]?.id
+    const byId = albumAppleMusicId ? await DiscotecaDB.getEntryByAppleMusicId(albumAppleMusicId) : undefined
+    const matched = byId ?? await DiscotecaDB.findAlbumTrackMatch(artist.id, normalizeTrackName(attrs.name ?? candidate.name))
+    if (matched) initialAlbum = { id: matched.id, name: matched.name }
   }
 
   const outcome = await runConfirmLoop(
     ctx, messageId, artworkUrl, buildPreview,
     attrs.name ?? candidate.name, suggestedRarity ?? rarities[0]!.name, rarities,
-    initialGenres, async () => enforceKpopExclusivity(await DiscotecaDB.resolveGenresByAliases(genreNames, isAlbum)),
+    initialGenres, async () => enforceExclusiveGenres(await DiscotecaDB.resolveGenresByAliases(genreNames, isAlbum)),
     async raw => (await DiscotecaDB.resolveGenresByAliases([raw], isAlbum)).resolved[0] ?? null,
-    artist,
+    artist, initialAlbum, !isAlbum,
   )
   if (!outcome) return
 
@@ -268,6 +321,18 @@ async function runResourceConfirm(ctx: IncomingCommand, candidate: AppleMusicSea
     await DiscotecaDB.setEntryGenres(entry.id, outcome.genres.resolved.map(g => g.id))
     await AuditDB.log(user.id, 'discoteca.create', { entryId: entry.id, name: entry.name, type: 'album', appleMusicId: candidate.id, trackCount })
 
+    const albumTracks = (albumDetail.relationships?.tracks?.data ?? [])
+      .map(t => ({ trackAppleMusicId: t.id, name: (t.attributes as { name?: string } | undefined)?.name }))
+      .filter((t): t is { trackAppleMusicId: string; name: string } => !!t.name)
+    await DiscotecaDB.cacheAlbumTracks(entry.id, albumTracks)
+
+    // a single added before its album can't be id-matched later - Apple Music mints a new catalog id per track once it's on the album
+    const trackNames = new Set((albumDetail.relationships?.tracks?.data ?? []).map(t => normalizeTrackName((t.attributes as { name?: string } | undefined)?.name)).filter(Boolean))
+    const unlinkedSingles = await DiscotecaDB.getUnlinkedSinglesByArtist(outcome.artist.id)
+    for (const single of unlinkedSingles) {
+      if (trackNames.has(normalizeTrackName(single.name))) await DiscotecaDB.linkSingleToAlbum(single.id, entry.id)
+    }
+
     const savedText = `💿 Álbum salvo: \`${entry.id}\`. **${escapeMarkdown(entry.name)}**`
     if (outcome.messageId) {
       await reply(ctx, {
@@ -284,9 +349,8 @@ async function runResourceConfirm(ctx: IncomingCommand, candidate: AppleMusicSea
 
   const songDetail = detail as SongsEndpointTypes.SongResource
   const songAttrs = songDetail.attributes
-
   const albumAppleMusicId = songDetail.relationships?.albums?.data?.[0]?.id
-  const existingAlbum = albumAppleMusicId ? await DiscotecaDB.getEntryByAppleMusicId(albumAppleMusicId) : undefined
+  const existingAlbum = outcome.album
 
   const previewUrl = songAttrs.previews?.[0]?.url
     ? await getOrProcessPreview({
@@ -328,6 +392,66 @@ async function runResourceConfirm(ctx: IncomingCommand, candidate: AppleMusicSea
       audioUrl: previewUrl,
       audio: { entryId: entry.id, performer: outcome.artist.name, title: entry.name, thumbnailUrl: artworkUrl },
     })
+    return
+  }
+  await reply(ctx, savedText)
+}
+
+export async function runEditFlow(ctx: IncomingCommand, entryId: number, type: 'album' | 'single'): Promise<void> {
+  const isAlbum = type === 'album'
+  const typeEmoji = isAlbum ? '💿' : '🎵'
+  const typeLabel = isAlbum ? 'álbum' : 'single'
+
+  const entry = await DiscotecaDB.getEntry(entryId)
+  if (!entry) { await reply(ctx, `😅 Não encontrei esse ${typeLabel}.`); return }
+
+  const rarities = await CardsDB.getRarities()
+  if (rarities.length === 0) { await reply(ctx, 'Não há raridades cadastradas ainda.'); return }
+
+  const artistRow = await DiscotecaDB.getArtist(entry.artistId)
+  if (!artistRow) return
+  const artist: Artist = { id: artistRow.id, name: artistRow.name, cardId: artistRow.cardId }
+
+  const genreRows = await DiscotecaDB.getGenresForEntry(entryId)
+  const initialGenres: ResolvedGenres = { resolved: genreRows, unmapped: [] }
+  const currentRarity = rarities.find(r => r.id === entry.rarityId) ?? rarities[0]!
+
+  let initialAlbum: AlbumOption = null
+  if (!isAlbum && entry.albumId) {
+    const albumEntry = await DiscotecaDB.getEntry(entry.albumId)
+    if (albumEntry) initialAlbum = { id: albumEntry.id, name: albumEntry.name }
+  }
+
+  const buildPreview = async (name: string, rarityName: string, rarityEmoji: string, genres: ResolvedGenres, artist: Artist, album: AlbumOption) => {
+    const genresLine = genres.resolved.length > 0 ? genres.resolved.map(g => escapeMarkdown(g.name)).join(', ') : '_nenhum gênero mapeado_'
+    const artistLine = await artistCardLine(artist)
+    const albumLine = !isAlbum ? (album ? `\n💽 Álbum: \`${album.id}\`. **${escapeMarkdown(album.name)}**` : '\n💽 Nenhum álbum vinculado.') : ''
+    return `${typeEmoji} **${escapeMarkdown(name)}** _(editando \`${entryId}\`)_\n${escapeMarkdown(artist.name)}\n\n🎼 ${genresLine}${albumLine}\n${artistLine}\n${rarityEmoji} ${escapeMarkdown(rarityName)}`
+  }
+
+  const outcome = await runConfirmLoop(
+    ctx, undefined, entry.artworkUrl ?? undefined, buildPreview,
+    entry.name, currentRarity.name, rarities,
+    initialGenres, undefined,
+    async raw => (await DiscotecaDB.resolveGenresByAliases([raw], isAlbum)).resolved[0] ?? null,
+    artist, initialAlbum, !isAlbum,
+  )
+  if (!outcome) return
+
+  const user = await getStaffUser(ctx)
+  if (!user) return
+
+  await DiscotecaDB.updateEntry(entryId, {
+    name: outcome.name,
+    rarityId: outcome.rarityId,
+    ...(isAlbum ? {} : { albumId: outcome.album?.id ?? null }),
+  })
+  await DiscotecaDB.setEntryGenres(entryId, outcome.genres.resolved.map(g => g.id))
+  await AuditDB.log(user.id, 'discoteca.edit', { entryId, name: outcome.name, type })
+
+  const savedText = `${typeEmoji} ${isAlbum ? 'Álbum' : 'Single'} atualizado: \`${entryId}\`. **${escapeMarkdown(outcome.name)}**`
+  if (outcome.messageId) {
+    await reply(ctx, { content: savedText, editMessageId: outcome.messageId })
     return
   }
   await reply(ctx, savedText)

@@ -94,6 +94,54 @@ describe("/addsingle", () => {
     expect(last.title).toBe("Test Song");
   }, 15000);
 
+  test("falls back to a local track-name match when the relationship id doesn't resolve to a cataloged album", async () => {
+    // Apple Music gives a pre-released single its own standalone "album" id, different from the
+    // LP's, and mints yet another id for the same track once it's actually on the album - the
+    // only signal left in common is the track name, matched against the locally cached tracklist
+    const artistId = (await fx.discotecaArtist({ name: "Test Fallback Artist", appleMusicArtistId: "test-artist-apple-id-fallback" })).id;
+    const parentAlbumAppleMusicId = `test-fallback-album-${Date.now()}`;
+    const parentAlbum = await DiscotecaDB.createEntry({
+      name: "Test Fallback Album", artistId, appleMusicId: parentAlbumAppleMusicId, type: 'album', rarityId,
+    });
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, parentAlbum!.id)); });
+    await DiscotecaDB.cacheAlbumTracks(parentAlbum!.id, [{ trackAppleMusicId: "test-track-on-album", name: "Test Fallback Song" }]);
+
+    const fallbackSongAppleMusicId = `test-song-fallback-${Date.now()}`;
+    const unrelatedAlbumAppleMusicId = `test-song-fallback-single-release-${Date.now()}`;
+    appleMusicState.searchResult = {
+      results: { songs: { data: [{ id: fallbackSongAppleMusicId, attributes: { name: "Test Fallback Song", artistName: "Test Fallback Artist", artwork: { url: "https://example.com/{w}x{h}bb.{f}" }, releaseDate: "2024-01-01" } }] } },
+    };
+    appleMusicState.songResult = {
+      data: [{
+        id: fallbackSongAppleMusicId,
+        attributes: {
+          name: "Test Fallback Song", artistName: "Test Fallback Artist", albumName: "Test Fallback Song - Single",
+          artwork: { url: "https://example.com/{w}x{h}bb.{f}" }, releaseDate: "2024-01-01", genreNames: [],
+        },
+        relationships: {
+          albums: { data: [{ id: unrelatedAlbumAppleMusicId, type: "albums" }] },
+          artists: { data: [{ id: "test-artist-apple-id-fallback", attributes: { name: "Test Fallback Artist" } }] },
+        },
+      }],
+    };
+
+    const workflowID = `test-addsingle-fallback-${Bun.randomUUIDv7()}`;
+    const runCtx = fakeCtx({ name: 'addsingle', authorId: staffPlatformId, args: ['test query'], platform: 'telegram', workflowID });
+    const handle = await DBOS.startWorkflow(AddSingleCommand, { workflowID }).execute(runCtx, { query: 'test query' });
+
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { index: 0 } }, 'discoteca:pick');
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { action: 'confirm' } }, 'discoteca:confirm');
+    await handle.getResult();
+
+    const entry = await db.select().from(discotecaEntries).where(eq(discotecaEntries.appleMusicId, fallbackSongAppleMusicId)).then(r => r[0]);
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, entry!.id)); });
+
+    expect(entry?.albumId).toBe(parentAlbum!.id);
+    expect(entry?.albumAppleMusicId).toBe(unrelatedAlbumAppleMusicId);
+  }, 15000);
+
   test("warns on the confirm screen when the same single name already exists for this artist", async () => {
     const dupSongAppleMusicId = `test-song-dup-${Date.now()}`;
     appleMusicState.searchResult = {
@@ -137,5 +185,50 @@ describe("/addsingle", () => {
 
     expect(captions.length).toBeGreaterThan(0);
     expect(captions[0]).toContain('Já existe um single');
+  }, 15000);
+
+  test("staff can override the suggested album via the 🔄 Trocar álbum button", async () => {
+    const artistId = (await fx.discotecaArtist({ name: "Test Override Artist", appleMusicArtistId: "test-artist-apple-id-override" })).id;
+    const wrongAlbum = await DiscotecaDB.createEntry({
+      name: "Test Wrong Album", artistId, appleMusicId: `test-override-wrong-${Date.now()}`, type: 'album', rarityId,
+    });
+    const rightAlbum = await DiscotecaDB.createEntry({
+      name: "Test Right Album", artistId, appleMusicId: `test-override-right-${Date.now()}`, type: 'album', rarityId,
+    });
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, wrongAlbum!.id)); });
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, rightAlbum!.id)); });
+    await DiscotecaDB.cacheAlbumTracks(wrongAlbum!.id, [{ trackAppleMusicId: "t-wrong", name: "Test Override Song" }]);
+
+    const overrideSongAppleMusicId = `test-song-override-${Date.now()}`;
+    appleMusicState.searchResult = {
+      results: { songs: { data: [{ id: overrideSongAppleMusicId, attributes: { name: "Test Override Song", artistName: "Test Override Artist", artwork: { url: "https://example.com/{w}x{h}bb.{f}" }, releaseDate: "2024-01-01" } }] } },
+    };
+    appleMusicState.songResult = {
+      data: [{
+        id: overrideSongAppleMusicId,
+        attributes: { name: "Test Override Song", artistName: "Test Override Artist", artwork: { url: "https://example.com/{w}x{h}bb.{f}" }, releaseDate: "2024-01-01", genreNames: [] },
+        relationships: { albums: { data: [] }, artists: { data: [{ id: "test-artist-apple-id-override", attributes: { name: "Test Override Artist" } }] } },
+      }],
+    };
+
+    const workflowID = `test-addsingle-override-${Bun.randomUUIDv7()}`;
+    const runCtx = fakeCtx({ name: 'addsingle', authorId: staffPlatformId, args: ['test query'], platform: 'telegram', workflowID });
+    const handle = await DBOS.startWorkflow(AddSingleCommand, { workflowID }).execute(runCtx, { query: 'test query' });
+
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { index: 0 } }, 'discoteca:pick');
+    await new Promise(r => setTimeout(r, 500));
+    // suggested album is "Test Wrong Album" via the track-name match - override it
+    await DBOS.send(workflowID, { value: { action: 'changeAlbum' } }, 'discoteca:confirm');
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: String(rightAlbum!.id) }, 'discoteca:album');
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { action: 'confirm' } }, 'discoteca:confirm');
+    await handle.getResult();
+
+    const entry = await db.select().from(discotecaEntries).where(eq(discotecaEntries.appleMusicId, overrideSongAppleMusicId)).then(r => r[0]);
+    fx.onCleanup(async () => { await db.delete(discotecaEntries).where(eq(discotecaEntries.id, entry!.id)); });
+
+    expect(entry?.albumId).toBe(rightAlbum!.id);
   }, 15000);
 });

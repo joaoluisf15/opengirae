@@ -1,7 +1,8 @@
 import { Command, Page, CommandArgument, CommandArgumentType } from '@girae/common/commands'
-import { reply, pageNavRow } from '@girae/common/dbos/messaging'
+import { reply, pageNavRow, toPageButton } from '@girae/common/dbos/messaging'
 import { UsersDB } from '@girae/database/users'
 import { showEntry, renderEntriesByTypePage, type EntryDetails } from './disco'
+import { buildFilterArg } from '@girae/common/utilities/pageFilters'
 import type { IncomingCommand } from '@girae/common/commands/types'
 
 export default class AlbunsCommand extends Command {
@@ -20,14 +21,21 @@ export default class AlbunsCommand extends Command {
     }
 
     const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
-    const page = await renderEntriesByTypePage('album', user?.id ?? 0, 0)
-    const navRow = pageNavRow('albuns', '', 0, page.hasNext, page.totalPages)
-    await reply(ctx, { content: page.content, buttonRows: navRow.length ? [navRow] : undefined })
+    const arg = buildFilterArg([], '')
+    const page = await renderEntriesByTypePage('album', user?.id ?? 0, 0, arg)
+    const navRow = pageNavRow('albuns', arg, 0, page.hasNext, page.totalPages)
+    await reply(ctx, {
+      content: page.content,
+      buttonRows: [
+        ...page.extraRows.map(row => row.map(b => toPageButton('albuns', b))),
+        ...(navRow.length ? [navRow] : []),
+      ],
+    })
   }
 
   @Page({ name: 'albuns', restricted: true })
-  static async albunsPage(_arg: string, page: number, authorId: string, platform: 'telegram' | 'discord') {
+  static async albunsPage(arg: string, page: number, authorId: string, platform: 'telegram' | 'discord') {
     const user = await UsersDB.getUserByPlatformAccount(platform, authorId)
-    return renderEntriesByTypePage('album', user?.id ?? 0, page)
+    return renderEntriesByTypePage('album', user?.id ?? 0, page, arg)
   }
 }

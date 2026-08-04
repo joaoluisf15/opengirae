@@ -71,6 +71,14 @@ export async function resolveCategoryByIdOrName(raw: string): Promise<ParseOutco
   return parseCategory(raw)
 }
 
+export async function resolveDiscotecaAlbumByIdOrName(raw: string): Promise<ParseOutcome> {
+  return parseDiscotecaEntry(raw, 'album')
+}
+
+export async function resolveDiscotecaArtistByIdOrName(raw: string): Promise<ParseOutcome> {
+  return parseDiscotecaArtist(raw)
+}
+
 async function parseCard(raw: string): Promise<ParseOutcome> {
   const asId = parseStrictId(raw)
   if (asId !== undefined) {
@@ -150,15 +158,16 @@ async function discotecaSubcategoryNotFoundMessage(): Promise<string> {
   return `Categoria não encontrada. As seguintes categorias estão disponíveis:\n\n${list}`
 }
 
-async function parseDiscotecaSubcategory(raw: string): Promise<ParseOutcome> {
+async function parseDiscotecaSubcategory(raw: string, subcategoryType?: 'album' | 'single'): Promise<ParseOutcome> {
   const asId = parseStrictId(raw)
   if (asId !== undefined) {
     const subcategory = await DiscotecaDB.getSubcategory(asId)
-    return subcategory ? { ok: true, value: subcategory } : { ok: false, message: await discotecaSubcategoryNotFoundMessage() }
+    if (!subcategory || (subcategoryType && subcategory.isAlbum !== (subcategoryType === 'album'))) return { ok: false, message: await discotecaSubcategoryNotFoundMessage() }
+    return { ok: true, value: subcategory }
   }
 
   const normalizedQuery = normalizeText(raw)
-  const allSubcategories = await DiscotecaDB.getSubcategories()
+  const allSubcategories = (await DiscotecaDB.getSubcategories()).filter(s => subcategoryType ? s.isAlbum === (subcategoryType === 'album') : true)
   const results = allSubcategories.filter(s => normalizeText(s.name).includes(normalizedQuery))
   if (results.length === 0) return { ok: false, message: await discotecaSubcategoryNotFoundMessage() }
   if (results.length > 1) {
@@ -195,6 +204,28 @@ async function parseDiscotecaEntry(raw: string, entryType?: 'album' | 'single'):
 
   const entry = await DiscotecaDB.getEntryWithDetails(results[0]!.id)
   return entry ? { ok: true, value: entry } : { ok: false }
+}
+
+async function discotecaArtistNotFoundMessage(): Promise<string> {
+  return 'Artista não encontrado.'
+}
+
+async function parseDiscotecaArtist(raw: string): Promise<ParseOutcome> {
+  const asId = parseStrictId(raw)
+  if (asId !== undefined) {
+    const artist = await DiscotecaDB.getArtist(asId)
+    return artist ? { ok: true, value: artist } : { ok: false, message: await discotecaArtistNotFoundMessage() }
+  }
+
+  const results = await DiscotecaDB.searchArtistsByName(raw, 100)
+  if (results.length === 0) return { ok: false, message: await discotecaArtistNotFoundMessage() }
+  if (results.length > 1) {
+    const lines = results.map(a => `🎧 \`${a.id}\`. **${escapeMarkdown(a.name)}**`)
+    return { ok: false, message: ambiguousResultsMessage(lines) }
+  }
+
+  const artist = await DiscotecaDB.getArtist(results[0]!.id)
+  return artist ? { ok: true, value: artist } : { ok: false }
 }
 
 async function parseVanityItem(raw: string, vanityType: 'background' | 'sticker', showBasePrice?: boolean): Promise<ParseOutcome> {
@@ -312,8 +343,9 @@ async function parseValue(spec: CommandArgumentSpec, raw: string | undefined, ct
     case CommandArgumentType.CATEGORY: return parseCategory(raw)
     case CommandArgumentType.SUBCATEGORY: return parseSubcategory(raw)
     case CommandArgumentType.DISCOTECA_GENRE: return parseDiscotecaGenre(raw)
-    case CommandArgumentType.DISCOTECA_SUBCATEGORY: return parseDiscotecaSubcategory(raw)
+    case CommandArgumentType.DISCOTECA_SUBCATEGORY: return parseDiscotecaSubcategory(raw, spec.subcategoryType)
     case CommandArgumentType.DISCOTECA_ENTRY: return parseDiscotecaEntry(raw, spec.entryType)
+    case CommandArgumentType.DISCOTECA_ARTIST: return parseDiscotecaArtist(raw)
     case CommandArgumentType.VANITY_ITEM: return parseVanityItem(raw, spec.vanityType, spec.showBasePrice)
   }
 }
