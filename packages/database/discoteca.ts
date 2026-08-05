@@ -349,7 +349,7 @@ export class DiscotecaDB {
   // WHERE expression must match discoteca_artists_name_trgm_idx's expression exactly for the index to be used
   static searchArtistsByName = maybeTransaction('searchArtistsByName', async (client, query: string, limit: number = 100) => {
     return await client
-      .select({ id: discotecaArtists.id, name: discotecaArtists.name })
+      .select({ id: discotecaArtists.id, name: discotecaArtists.name, cardId: discotecaArtists.cardId })
       .from(discotecaArtists)
       .where(sql`immutable_unaccent(${discotecaArtists.name}) ilike immutable_unaccent(${'%' + query + '%'})`)
       .limit(limit);
