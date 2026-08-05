@@ -2,7 +2,7 @@ import { UsersDB } from "@girae/database/users"
 import { tg } from "./botInfo"
 import { error } from "@girae/common/logger"
 
-const SUPPORT_CHANNEL = '@undergirae'
+const SUPPORT_CHANNEL = '@canalgirae'
 const CHECK_TTL_MS = 60 * 60 * 1000
 
 const JOINED_STATUSES = new Set(['creator', 'administrator', 'member', 'restricted'])
