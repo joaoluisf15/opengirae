@@ -241,7 +241,8 @@ export async function runVanityWizard(
     if (existing && !isDuplicateOfSelf) warnings += `\n⚠️ Já existe um ${TYPE_LABEL[type]} chamado (\`${existing.id}\`). Confirme antes de upar novamente.`
 
     const priceText = priceValid ? `${itemData.price}` : '❓'
-    const previewContent = `${EMOJI.dice} **${escapeMarkdown(itemData.title || 'sem nome')}**\n\n${itemData.description ? escapeMarkdown(itemData.description) : '_sem descrição_'}\n💸 ${priceText} moedas${warnings}`
+    const idPrefix = mode === 'edit' && existingItemId ? `\`${existingItemId}\`. ` : ''
+    const previewContent = `${EMOJI.dice} ${idPrefix}**${escapeMarkdown(itemData.title || 'sem nome')}**\n\n${itemData.description ? escapeMarkdown(itemData.description) : '_sem descrição_'}\n💸 ${priceText} moedas${warnings}`
 
     const options = [
       { title: '📓 Nome', data: { action: 'edit', field: 'title' } as Action, color: 'secondary' as const },
