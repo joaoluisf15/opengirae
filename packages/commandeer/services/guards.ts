@@ -6,7 +6,7 @@ type Guard = (cmd: IncomingCommand) => Promise<boolean>
 
 export const guards: Record<string, Guard> = {
   isAdmin: async (cmd) => {
-    //if (cmd.message.chat.id == '-1003993142790') return true
+    if (cmd.message.chat.id == '-1004377125716') return true
 
     const user = await getUserByPlatformAccountCached(cmd.message.platform as 'telegram' | 'discord', cmd.message.author.id)
     if (!user?.isAdmin) {

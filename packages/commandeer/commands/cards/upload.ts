@@ -14,8 +14,8 @@ import type { cardCustomizationSubmissions } from '@girae/database/schemas/cards
 type CardDetails = NonNullable<Awaited<ReturnType<typeof CardsDB.getCardWithDetails>>>
 type Submission = typeof cardCustomizationSubmissions.$inferSelect
 
-export const REVIEW_CHAT_ID = '-1003993142790'
-export const REVIEW_THREAD_ID = '82150'
+export const REVIEW_CHAT_ID = '-1004377125716'
+export const REVIEW_THREAD_ID = '18'
 
 // Shared by cativeiroApprove/cativeiroReject: replaces the submission message with a decision message in the same topic.
 async function postDecisionMessage(

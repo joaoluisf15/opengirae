@@ -30,15 +30,10 @@ const stripBotMention = (content: string): string | null => {
 }
 
 const ADDCARD_CHAT_IDS = [
-  ['-1003993142790', '6016'],
-  ['-1004365766145', '2'],
-  ['-1003993142790', '69183'],
-  ['-1003993142790', '69186'],
-  ['-1003993142790', '69170']
+  ['-1004377125716', '89'],
 ]
-const ADDBG_CHAT_ID = [['-1003993142790', '10106']]
-const CARDIMG_FROM_CAPTION_CHAT_IDS = [['-1003993142790', '46522']]
-
+const ADDBG_CHAT_ID = [['-1004377125716', '91']]
+const CARDIMG_FROM_CAPTION_CHAT_IDS = [[]]
 const isLocalDevelopment = !!process.env.LOCAL_DEVELOPMENT
 
 tg.on('message', async (msg) => {
