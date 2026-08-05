@@ -17,7 +17,7 @@ async function renderItem(item: VanityItem, viewerTelegramId: string, platform: 
   ])
   const owned = user ? await VanitiesDB.hasBought(user.id, item.id) : false
 
-  const content = `**${escapeMarkdown(item.title)}**
+  const content = `🖼️ \`${item.id}\`. **${escapeMarkdown(item.title)}**
 ${escapeMarkdown(item.description)}
 💸 ${displayPrice} moedas${owned ? '\n✅ Você possui este item.' : ''}`
 

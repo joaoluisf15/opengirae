@@ -65,6 +65,7 @@ async function editMessageMediaRaw(params: {
   messageId: string
   photoUrl: string
   isAnimated: boolean
+  isVideo?: boolean
   caption?: string
   buttons?: PendingResponse['buttons']
 }): Promise<string> {
@@ -75,7 +76,7 @@ async function editMessageMediaRaw(params: {
       chat_id: params.chatId,
       message_id: Number(params.messageId),
       media: {
-        type: params.isAnimated ? 'animation' : 'photo',
+        type: params.isVideo ? 'video' : params.isAnimated ? 'animation' : 'photo',
         media: params.photoUrl,
         caption: params.caption,
         parse_mode: 'HTML',
@@ -128,6 +129,7 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<Sen
         messageId: response.messageId!,
         photoUrl,
         isAnimated: isAnimatedMediaUrl(photoUrl),
+        isVideo: response.isVideo,
         caption: formattedContent,
         buttons: response.buttons,
       }) }

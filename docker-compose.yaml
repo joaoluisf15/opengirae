@@ -56,6 +56,20 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  commandeer-worker:
+    build: .
+    command: ["bun", "packages/commandeer/index.ts"]
+    env_file: .env
+    environment:
+      SCRATCH_DIR: /app/scratch
+      PORT: "8090"
+    volumes:
+      - scratch:/app/scratch
+    depends_on:
+      db-push:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   answerer:
     build: .
     command: ["bun", "packages/answerer/index.ts"]

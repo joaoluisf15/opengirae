@@ -17,6 +17,16 @@ const FILTERS: FilterDef<OwnedCardRow>[] = [
   { id: '3', emoji: '🥇', description: 'com raridade lendária', match: c => c.rarityName === 'Lendário' },
 ]
 
+async function resolveFavoriteCardMedia(userId: number, favoriteCardId: number | null): Promise<{ photoUrl?: string; isVideo?: boolean }> {
+  if (!favoriteCardId) return {}
+  const [card, owned] = await Promise.all([
+    CardsDB.getCardWithDetails(favoriteCardId),
+    CardsDB.getUserCard(userId, favoriteCardId),
+  ])
+  const photoUrl = owned?.customMediaUrl ?? card?.imageUrl ?? undefined
+  return { photoUrl, isVideo: owned?.customMediaType === 'video' }
+}
+
 async function renderPage(rawArg: string, page: number, viewerTelegramId: string, platform: 'telegram' | 'discord') {
   const { active } = parseFilterArg(rawArg)
 
@@ -45,8 +55,12 @@ ${rows}
 
 ${pageInfo}${EMOJI.browse} Para ver um desses cards, use \`/card id\`.`
 
+  const media = await resolveFavoriteCardMedia(viewer.id, viewer.favoriteCardId)
+
   return {
     content,
+    photoUrl: media.photoUrl,
+    isVideo: media.isVideo,
     hasNext: page < totalPages - 1,
     totalPages,
     extraRows: [filterButtonsRow(FILTERS, active, '')],
@@ -76,6 +90,8 @@ export default class CardsListCommand extends Command {
     const navRow = pageNavRow('cts', '', 0, page.hasNext, page.totalPages)
     await reply(ctx, {
       content: page.content,
+      photoUrl: page.photoUrl,
+      isVideo: page.isVideo,
       buttonRows: [
         ...page.extraRows.map(row => row.map(b => toPageButton('cts', b))),
         ...(navRow.length ? [navRow] : []),

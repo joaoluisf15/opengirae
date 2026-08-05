@@ -150,6 +150,7 @@
 		defaultColDef: { sortable: true, filter: false, resizable: true },
 		columnDefs: [
 			{ headerName: '', cellRenderer: thumbnailCellRenderer, sortable: false, width: 60 },
+			{ headerName: 'ID', field: 'id', width: 70 },
 			{ headerName: 'Nome', field: 'name', flex: 2, minWidth: 180 },
 			{ headerName: 'Raridade', field: 'rarityName', cellRenderer: rarityCellRenderer, sortable: false, width: 130 },
 			{ headerName: 'Categoria', field: 'categoryName', sortable: false, width: 140 },

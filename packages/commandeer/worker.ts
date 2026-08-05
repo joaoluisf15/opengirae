@@ -1,12 +1,18 @@
 import { Worker, MetricsTime } from 'bullmq'
 import { connection, responseQueue } from '@girae/common/queue'
-import { COMMAND_QUEUE_NAME, RESUME_QUEUE_NAME, QUICKVIEW_QUEUE_NAME, PAGE_QUEUE_NAME } from '@girae/common/queue/constants'
+import { COMMAND_QUEUE_NAME, RESUME_QUEUE_NAME, QUICKVIEW_QUEUE_NAME, PAGE_QUEUE_NAME, UPLOAD_QUEUE_NAME } from '@girae/common/queue/constants'
 import { executeCommand } from './services/commands'
 import { DBOS } from '@girae/common/dbos'
 import { info, error } from '@girae/common/logger'
 import { findQuickView, findPage } from './loaders/commands'
 import type { PendingResponse } from '@girae/common/commands/types'
-import { pageNavSteps } from '@girae/common/dbos/messaging'
+import { pageNavSteps, reply } from '@girae/common/dbos/messaging'
+import { CardsDB } from '@girae/database/cards'
+import { uploadFromUrl } from '@girae/common/utilities/storage'
+import { buildCtx } from './services/syntheticCtx'
+import { escapeMarkdown } from '@girae/common/utilities/markdown'
+import { mention } from '@girae/common/utilities/mention'
+import { REVIEW_CHAT_ID, REVIEW_THREAD_ID } from './commands/cards/upload'
 
 const QUEUE_WAIT_WARN_MS = 5000
 
@@ -87,6 +93,7 @@ export const pageWorker = new Worker(PAGE_QUEUE_NAME, async (job) => {
   const result: {
     content: string
     photoUrl?: string
+    isVideo?: boolean
     hasNext: boolean
     totalPages?: number
     extraRows?: Array<Array<{ text: string; arg: string; page: number }>>
@@ -111,6 +118,7 @@ export const pageWorker = new Worker(PAGE_QUEUE_NAME, async (job) => {
       messageId,
       content: result.content,
       photoUrl: result.photoUrl,
+      isVideo: result.isVideo,
       platform,
       buttons: buttons.length ? buttons : undefined,
     } satisfies PendingResponse),
@@ -126,8 +134,44 @@ pageWorker.on('failed', (job, err) => {
   error('commandeer', `Page job ${job?.id} (handler: ${job?.data?.handler}) failed: ${err.message}`)
 })
 
+export const uploadWorker = new Worker(UPLOAD_QUEUE_NAME, async (job) => {
+  const { userId, cardId, photoUrl, isVideo, ctx } = job.data as {
+    userId: number; cardId: number; photoUrl: string; isVideo: boolean
+    ctx: { platform: 'telegram' | 'discord'; authorId: string; authorName: string; chatId: string; threadId?: string }
+  }
+
+  const cdnUrl = await uploadFromUrl(photoUrl, 'cativeiro')
+  const mediaType = isVideo ? 'video' as const : 'photo' as const
+
+  const result = await CardsDB.createCativeiroSubmission(userId, cardId, cdnUrl, mediaType, {
+    platform: ctx.platform,
+    platformId: ctx.authorId,
+    name: ctx.authorName,
+    chatId: ctx.chatId,
+    threadId: ctx.threadId,
+  })
+  if (!result.ok || !result.submission) return // a second concurrent /upload for the same card already has a pending submission - nothing to do
+
+  const card = await CardsDB.getCardWithDetails(cardId)
+  const reviewCtx = buildCtx('telegram', ctx.authorId, ctx.authorName, REVIEW_CHAT_ID, REVIEW_THREAD_ID)
+  const reviewMessageId = await reply(reviewCtx, {
+    content: `📸 \`${userId}\`. ${mention(ctx.platform, ctx.authorId, ctx.authorName)} enviou ${isVideo ? 'um vídeo personalizado' : 'uma imagem personalizada'} para o card ${card?.rarityEmoji ?? ''} \`${cardId}\`. **${escapeMarkdown(card?.name ?? '?')}**!\n\nAprove clicando em ✅ Aprovar, ou rejeite usando ❌ Rejeitar.`,
+    photoUrl: cdnUrl,
+    isVideo,
+    buttons: [
+      { text: '✅ Aprovar', quickView: { handler: 'cativeiroApprove', arg: String(result.submission.id) }, color: 'success' },
+      { text: '❌ Rejeitar', quickView: { handler: 'cativeiroReject', arg: String(result.submission.id) }, color: 'danger' },
+    ],
+  })
+  if (reviewMessageId) await CardsDB.setCativeiroSubmissionReviewMessage(result.submission.id, REVIEW_CHAT_ID, reviewMessageId)
+}, { connection, metrics: { maxDataPoints: MetricsTime.ONE_WEEK * 2 } })
+
+uploadWorker.on('failed', (job, err) => {
+  error('commandeer', `Upload job ${job?.id} (card: ${job?.data?.cardId}) failed: ${err.message}`)
+})
+
 const shutdown = async () => {
-  await Promise.all([commandWorker.close(), resumeWorker.close(), quickViewWorker.close(), pageWorker.close()])
+  await Promise.all([commandWorker.close(), resumeWorker.close(), quickViewWorker.close(), pageWorker.close(), uploadWorker.close()])
   process.exit(0)
 }
 process.on('SIGTERM', shutdown)

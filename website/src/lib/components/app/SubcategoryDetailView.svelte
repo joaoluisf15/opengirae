@@ -5,9 +5,10 @@
 	import CardRows from './CardRows.svelte';
 	import InfiniteScrollSentinel from './InfiniteScrollSentinel.svelte';
 
-	type Row = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number };
+	type Row = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number; tradable: boolean };
 	type Tab = 'owned' | 'missing';
 	type Result = { rows: Row[]; total: number; ownedCount: number; missingCount: number };
+	type TradeFilter = 'all' | 'tradable' | 'nonTradable';
 
 	const PAGE_SIZE = 20;
 
@@ -29,6 +30,7 @@
 	let ownedCount = $state(0);
 	let missingCount = $state(0);
 	let isGoal = $state(initialIsGoal ?? false);
+	let tradeFilter = $state<TradeFilter>('all');
 
 	if (initialIsGoal === undefined) {
 		telegramTrpc.telegram.cards.goalStatus.query({ subcategoryId }).then((result) => (isGoal = result));
@@ -46,6 +48,12 @@
 		tab;
 		cards.reset();
 	});
+
+	const filteredItems = $derived(
+		tradeFilter === 'all' ? cards.items
+			: tradeFilter === 'tradable' ? cards.items.filter(c => c.tradable)
+			: cards.items.filter(c => !c.tradable)
+	);
 
 	async function toggleGoal() {
 		if (isGoal) {
@@ -73,12 +81,19 @@
 			<SegmentedButton strong active={tab === 'owned'} onClick={() => (tab = 'owned')}>Encontrados ({ownedCount})</SegmentedButton>
 			<SegmentedButton strong active={tab === 'missing'} onClick={() => (tab = 'missing')}>Não encontrados ({missingCount})</SegmentedButton>
 		</Segmented>
+		<div class="mt-3">
+			<Segmented strong>
+				<SegmentedButton strong active={tradeFilter === 'all'} onClick={() => (tradeFilter = 'all')}>Todos</SegmentedButton>
+				<SegmentedButton strong active={tradeFilter === 'tradable'} onClick={() => (tradeFilter = 'tradable')}>Tradeable</SegmentedButton>
+				<SegmentedButton strong active={tradeFilter === 'nonTradable'} onClick={() => (tradeFilter = 'nonTradable')}>Não tradeable</SegmentedButton>
+			</Segmented>
+		</div>
 	</div>
 
 	{#if cards.resetLoading}
 		<div class="flex justify-center p-8"><Preloader /></div>
 	{:else}
-		<CardRows cards={cards.items} {onOpenActions} />
+		<CardRows cards={filteredItems} {onOpenActions} />
 		<InfiniteScrollSentinel disabled={cards.items.length >= cards.total} loading={cards.loading} onIntersect={cards.loadMore} />
 	{/if}
 </Page>
