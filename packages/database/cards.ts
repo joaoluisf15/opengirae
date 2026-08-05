@@ -870,6 +870,7 @@ export class CardsDB {
         rarityName: rarities.name,
         rarityEmoji: rarities.emoji,
         ownedCount: sql<number>`CAST(COALESCE(${userCards.count}, 0) AS INTEGER)`,
+        tradable: sql<boolean>`COALESCE(${userCards.tradable}, false)`,
       })
       .from(cardSubcategories)
       .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))

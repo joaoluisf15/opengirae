@@ -2,7 +2,7 @@ import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { TestFixtures } from "@girae/tests";
 import { db } from "../../index";
 import { userCards } from "../../schemas/cards";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { CardsDB } from "../../cards";
 
 describe("CardsDB.getCardsInSubcategoryForUserPaginated", () => {
@@ -41,5 +41,15 @@ describe("CardsDB.getCardsInSubcategoryForUserPaginated", () => {
     expect(result.rows).toHaveLength(3);
     expect(result.total).toBe(3);
     expect(result.rows.every(r => r.ownedCount === 0)).toBe(true);
+  });
+
+  test("reports tradable per row", async () => {
+    const [firstOwned] = await CardsDB.getCardsInSubcategoryForUserPaginated(subcategoryId, userId, { ownedFilter: 'owned', limit: 1 }).then(r => r.rows);
+    expect(firstOwned).toHaveProperty('tradable');
+
+    await db.update(userCards).set({ tradable: true }).where(and(eq(userCards.userId, userId), eq(userCards.cardId, firstOwned!.id)));
+    const refreshed = await CardsDB.getCardsInSubcategoryForUserPaginated(subcategoryId, userId, { ownedFilter: 'owned', limit: 20 });
+    const row = refreshed.rows.find(r => r.id === firstOwned!.id);
+    expect(row?.tradable).toBe(true);
   });
 });
