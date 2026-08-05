@@ -167,7 +167,7 @@ async function resolveDiscoArtist(raw: string): Promise<{ ok: true; artist: Arti
   if (results.length > 1) {
     const shown = results.slice(0, 15)
     const rest = results.length - shown.length
-    const lines = shown.map(a => `🎧 **${escapeMarkdown(a.name)}**${a.cardId ? ` — \`/disco ${a.cardId}\`` : ''}`)
+    const lines = shown.map(a => a.cardId ? `🎧 \`${a.cardId}\`. **${escapeMarkdown(a.name)}**` : `🎧 **${escapeMarkdown(a.name)}**`)
     const extra = rest > 0 ? `\n\n_e mais ${rest}..._` : ''
     return { ok: false, message: `🔎 **${results.length}** artistas encontrados:\n\n${lines.join('\n')}${extra}\n\nSeja mais específico.` }
   }
