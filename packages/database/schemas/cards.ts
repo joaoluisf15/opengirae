@@ -122,7 +122,7 @@ export const userCards = pgTable(
   ],
 );
 
-export const cativeiroSubmissionStatus = pgEnum("cativeiro_submission_status", ["pending", "approved", "rejected"])
+export const cativeiroSubmissionStatus = pgEnum("cativeiro_submission_status", ["pending", "approved", "rejected", "cancelled"])
 
 // pending-review queue for /upload's media customizations - has its own lifecycle/history.
 export const cardCustomizationSubmissions = pgTable(

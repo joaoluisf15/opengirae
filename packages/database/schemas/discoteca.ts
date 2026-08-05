@@ -62,6 +62,13 @@ export const discotecaArtists = pgTable(
   ],
 );
 
+export const discotecaArtistAppleIds = pgTable("discoteca_artist_apple_ids", {
+  appleMusicArtistId: text().primaryKey(),
+  artistId: integer()
+    .notNull()
+    .references(() => discotecaArtists.id, { onDelete: "cascade" }),
+});
+
 export const discotecaEntries = pgTable(
   "discoteca_entries",
   {

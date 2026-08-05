@@ -1,0 +1,1 @@
+ALTER TYPE "public"."cativeiro_submission_status" ADD VALUE 'cancelled';

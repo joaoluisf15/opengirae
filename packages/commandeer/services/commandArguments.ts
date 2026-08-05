@@ -19,6 +19,7 @@ const GREEDY_TYPES = new Set([
   CommandArgumentType.DISCOTECA_GENRE,
   CommandArgumentType.DISCOTECA_SUBCATEGORY,
   CommandArgumentType.DISCOTECA_ENTRY,
+  CommandArgumentType.DISCOTECA_ARTIST,
   CommandArgumentType.VANITY_ITEM,
 ])
 

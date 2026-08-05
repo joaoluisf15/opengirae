@@ -1165,6 +1165,28 @@ export class CardsDB {
     return submission ? { ok: true as const, submission } : { ok: false as const, reason: 'not_pending' as const };
   })
 
+  static getPendingCativeiroSubmissionForUser = maybeTransaction('getPendingCativeiroSubmissionForUser', async (client, userId: number) => {
+    return await client
+      .select()
+      .from(cardCustomizationSubmissions)
+      .where(and(eq(cardCustomizationSubmissions.userId, userId), eq(cardCustomizationSubmissions.status, 'pending')))
+      .limit(1)
+      .then(a => a?.[0]);
+  })
+
+  static cancelCativeiroSubmission = maybeTransaction('cancelCativeiroSubmission', async (client, submissionId: number, userId: number) => {
+    const [submission] = await client
+      .update(cardCustomizationSubmissions)
+      .set({ status: 'cancelled' })
+      .where(and(
+        eq(cardCustomizationSubmissions.id, submissionId),
+        eq(cardCustomizationSubmissions.userId, userId),
+        eq(cardCustomizationSubmissions.status, 'pending'),
+      ))
+      .returning();
+    return submission ? { ok: true as const, submission } : { ok: false as const, reason: 'not_pending' as const };
+  })
+
   static updateRarity = maybeTransaction('updateRarity', async (client, id: number, data: Partial<typeof rarities.$inferInsert>) => {
     return await client.update(rarities).set(data).where(eq(rarities.id, id)).returning().then(a => a?.[0]);
   })

@@ -7,6 +7,7 @@ import {
   discotecaEntrySubcategories,
   discotecaPreviewCache,
   discotecaArtists,
+  discotecaArtistAppleIds,
   discotecaAlbumTracks,
   userDiscoteca,
 } from "./schemas/discoteca";
@@ -304,6 +305,16 @@ export class DiscotecaDB {
     const existing = await client.select().from(discotecaArtists).where(eq(discotecaArtists.appleMusicArtistId, appleMusicArtistId)).limit(1).then(a => a?.[0]);
     if (existing) return existing;
 
+    // this apple music artist id may have been merged into another artist previously - follow the alias
+    const aliased = await client
+      .select({ artist: discotecaArtists })
+      .from(discotecaArtistAppleIds)
+      .innerJoin(discotecaArtists, eq(discotecaArtists.id, discotecaArtistAppleIds.artistId))
+      .where(eq(discotecaArtistAppleIds.appleMusicArtistId, appleMusicArtistId))
+      .limit(1)
+      .then(a => a?.[0]?.artist);
+    if (aliased) return aliased;
+
     // artist cards can be filed under either the general music category or the girasia (idol) one
     const musicCategories = await client.select({ id: categories.id }).from(categories).where(inArray(categories.name, ['Música', 'GIRÁSIA']));
 
@@ -340,6 +351,19 @@ export class DiscotecaDB {
 
   static getArtistByCardId = maybeTransaction('getArtistByCardId', async (client, cardId: number) => {
     return await client.select().from(discotecaArtists).where(eq(discotecaArtists.cardId, cardId)).limit(1).then(a => a?.[0]);
+  })
+
+  static mergeArtists = maybeTransaction('mergeArtists', async (client, sourceId: number, targetId: number) => {
+    const source = await client.select().from(discotecaArtists).where(eq(discotecaArtists.id, sourceId)).limit(1).then(a => a?.[0]);
+    if (!source) return;
+
+    await client.update(discotecaEntries).set({ artistId: targetId }).where(eq(discotecaEntries.artistId, sourceId));
+    await client.update(discotecaArtistAppleIds).set({ artistId: targetId }).where(eq(discotecaArtistAppleIds.artistId, sourceId));
+    await client
+      .insert(discotecaArtistAppleIds)
+      .values({ appleMusicArtistId: source.appleMusicArtistId, artistId: targetId })
+      .onConflictDoUpdate({ target: discotecaArtistAppleIds.appleMusicArtistId, set: { artistId: targetId } });
+    await client.delete(discotecaArtists).where(eq(discotecaArtists.id, sourceId));
   })
 
   static setArtistImage = maybeTransaction('setArtistImage', async (client, artistId: number, imageUrl: string) => {
