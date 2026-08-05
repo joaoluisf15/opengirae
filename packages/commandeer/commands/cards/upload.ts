@@ -3,7 +3,7 @@ import { reply, deleteMsg } from '@girae/common/dbos/messaging'
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
 import { AuditDB } from '@girae/database/audit'
-import { uploadFromUrl } from '@girae/common/utilities/storage'
+import { uploadQueue } from '@girae/common/queue'
 import type { IncomingCommand } from '@girae/common/commands/types'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { mention } from '@girae/common/utilities/mention'
@@ -16,6 +16,10 @@ type Submission = typeof cardCustomizationSubmissions.$inferSelect
 
 export const REVIEW_CHAT_ID = '-1003993142790'
 export const REVIEW_THREAD_ID = '82150'
+
+// matches RESPONSE_JOB_OPTIONS' retry convention (packages/common/dbos/messaging.ts) - a transient
+// CDN/S3 blip shouldn't silently drop a submission.
+const UPLOAD_JOB_OPTIONS = { attempts: 3, backoff: { type: 'exponential', delay: 1000 } } as const
 
 // Shared by cativeiroApprove/cativeiroReject: replaces the submission message with a decision message in the same topic.
 async function postDecisionMessage(
@@ -73,34 +77,21 @@ export default class UploadCommand extends Command {
     const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
     if (!user) return
 
-    const cdnUrl = await uploadFromUrl(photoUrl, 'cativeiro')
-    const mediaType = isVideo ? 'video' as const : 'photo' as const
-
-    const result = await CardsDB.createCativeiroSubmission(user.id, args.card.id, cdnUrl, mediaType, {
-      platform: ctx.message.platform,
-      platformId: ctx.message.author.id,
-      name: ctx.message.author.name,
-      chatId: ctx.message.chat.id,
-      threadId: ctx.message.chat.threadId,
-    })
-    if (!result.ok || !result.submission) {
-      await reply(ctx, 'Você já tem uma submissão pendente para esse card! Aguarde nossa equipe revisar antes de enviar outra. 💌')
-      return
-    }
-
-    const reviewCtx = buildCtx('telegram', ctx.message.author.id, ctx.message.author.name, REVIEW_CHAT_ID, REVIEW_THREAD_ID)
-    const reviewMessageId = await reply(reviewCtx, {
-      content: `📸 \`${user.id}\`. ${mention(ctx.message.platform, ctx.message.author.id, ctx.message.author.name)} enviou ${isVideo ? 'um vídeo personalizado' : 'uma imagem personalizada'} para o card ${args.card.rarityEmoji} \`${args.card.id}\`. **${escapeMarkdown(args.card.name)}**!\n\nAprove clicando em ✅ Aprovar, ou rejeite usando ❌ Rejeitar.`,
-      photoUrl: cdnUrl,
+    await uploadQueue.add('processUpload', {
+      userId: user.id,
+      cardId: args.card.id,
+      photoUrl,
       isVideo,
-      buttons: [
-        { text: '✅ Aprovar', quickView: { handler: 'cativeiroApprove', arg: String(result.submission.id) }, color: 'success' },
-        { text: '❌ Rejeitar', quickView: { handler: 'cativeiroReject', arg: String(result.submission.id) }, color: 'danger' },
-      ],
-    })
-    if (reviewMessageId) await CardsDB.setCativeiroSubmissionReviewMessage(result.submission.id, REVIEW_CHAT_ID, reviewMessageId)
+      ctx: {
+        platform: ctx.message.platform,
+        authorId: ctx.message.author.id,
+        authorName: ctx.message.author.name,
+        chatId: ctx.message.chat.id,
+        threadId: ctx.message.chat.threadId,
+      },
+    }, UPLOAD_JOB_OPTIONS)
 
-    await reply(ctx, `📮 Recebemos sua submissão do card ${args.card.rarityEmoji} \`${args.card.id}\`. **${escapeMarkdown(args.card.name)}**! Nossa equipe vai revisar e te aviso no privado assim que tiver novidades.`)
+    await reply(ctx, `📮 Recebemos sua submissão do card ${args.card.rarityEmoji} \`${args.card.id}\`. **${escapeMarkdown(args.card.name)}**! Estamos processando e nossa equipe vai revisar assim que possível.`)
   }
 
   @QuickView({ name: 'cativeiroApprove' })
