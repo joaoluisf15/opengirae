@@ -27,7 +27,9 @@ export type CommandArgumentSpec<T = any> =
   | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.VANITY_ITEM; vanityType: 'background' | 'sticker'; showBasePrice?: boolean })
   | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.DISCOTECA_ENTRY; entryType?: 'album' | 'single' })
   | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.DISCOTECA_SUBCATEGORY; subcategoryType?: 'album' | 'single' })
-  | (BaseCommandArgumentSpec<T> & { type: Exclude<CommandArgumentType, CommandArgumentType.VANITY_ITEM | CommandArgumentType.DISCOTECA_ENTRY | CommandArgumentType.DISCOTECA_SUBCATEGORY> });
+  // paginatedAmbiguous: true replaces the flat "N results" text dump with a real paginated list on a multi-match search - opt-in per command, /card is the only user today.
+  | (BaseCommandArgumentSpec<T> & { type: CommandArgumentType.CARD; paginatedAmbiguous?: boolean })
+  | (BaseCommandArgumentSpec<T> & { type: Exclude<CommandArgumentType, CommandArgumentType.VANITY_ITEM | CommandArgumentType.DISCOTECA_ENTRY | CommandArgumentType.DISCOTECA_SUBCATEGORY | CommandArgumentType.CARD> });
 
 export function CommandArgument(specs: CommandArgumentSpec[]) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {

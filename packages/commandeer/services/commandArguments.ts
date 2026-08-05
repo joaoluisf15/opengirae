@@ -1,5 +1,5 @@
 import { CommandArgumentType, type CommandArgumentSpec } from '@girae/common/commands'
-import { reply } from '@girae/common/dbos/messaging'
+import { reply, pageNavRow } from '@girae/common/dbos/messaging'
 import type { IncomingCommand } from '@girae/common/commands/types'
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
@@ -10,6 +10,7 @@ import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { normalizeText } from '@girae/common/utilities/normalizeText'
 import { TYPE_LABEL } from './vanity/vanityBrowser'
 import { isEmojiOnly } from './cards/cativeiro'
+import { renderCardSearchResults } from '../commands/cards/card'
 
 const GREEDY_TYPES = new Set([
   CommandArgumentType.STRING,
@@ -39,7 +40,7 @@ export function splitPositionalTokens(args: string[], specs: CommandArgumentSpec
 
 export type ParseOutcome =
   | { ok: true; value: unknown }
-  | { ok: false; message?: string }
+  | { ok: false; message?: string; handled?: boolean }
 
 function parseStrictId(raw: string): number | undefined {
   return /^-?\d+$/.test(raw) ? parseInt(raw, 10) : undefined
@@ -80,7 +81,7 @@ export async function resolveDiscotecaArtistByIdOrName(raw: string): Promise<Par
   return parseDiscotecaArtist(raw)
 }
 
-async function parseCard(raw: string): Promise<ParseOutcome> {
+async function parseCard(raw: string, ctx?: IncomingCommand, opts?: { paginatedAmbiguous?: boolean }): Promise<ParseOutcome> {
   const asId = parseStrictId(raw)
   if (asId !== undefined) {
     const card = await CardsDB.getCardWithDetails(asId)
@@ -90,6 +91,12 @@ async function parseCard(raw: string): Promise<ParseOutcome> {
   const results = await CardsDB.searchCardsByName(raw, 100)
   if (results.length === 0) return { ok: false, message: 'Não encontrei um personagem com esse nome.' }
   if (results.length > 1) {
+    if (opts?.paginatedAmbiguous && ctx) {
+      const rendered = await renderCardSearchResults(raw, 0)
+      const navRow = pageNavRow('cardsearch', raw, 0, rendered.hasNext, rendered.totalPages)
+      await reply(ctx, { content: rendered.content, buttonRows: navRow.length ? [navRow] : [] })
+      return { ok: false, handled: true }
+    }
     const lines = results.map(c => `${c.rarityEmoji} \`${c.id}\`. **${escapeMarkdown(c.name)}** ${c.categoryEmoji ?? ''} _${escapeMarkdown(c.subcategoryName ?? '')}_`)
     return { ok: false, message: ambiguousResultsMessage(lines) }
   }
@@ -340,7 +347,7 @@ async function parseValue(spec: CommandArgumentSpec, raw: string | undefined, ct
     case CommandArgumentType.HEX_COLOR: return parseHexColor(raw)
     case CommandArgumentType.BOOLEAN: return parseBoolean(raw)
     case CommandArgumentType.EMOJI: return parseEmoji(raw)
-    case CommandArgumentType.CARD: return parseCard(raw)
+    case CommandArgumentType.CARD: return parseCard(raw, ctx, { paginatedAmbiguous: spec.paginatedAmbiguous })
     case CommandArgumentType.CATEGORY: return parseCategory(raw)
     case CommandArgumentType.SUBCATEGORY: return parseSubcategory(raw)
     case CommandArgumentType.DISCOTECA_GENRE: return parseDiscotecaGenre(raw)
@@ -353,7 +360,7 @@ async function parseValue(spec: CommandArgumentSpec, raw: string | undefined, ct
 
 export type CommandArgumentResult =
   | { ok: true; values: Record<string, unknown> }
-  | { ok: false; message?: string }
+  | { ok: false; message?: string; handled?: boolean }
 
 export async function parseCommandArguments(
   specs: CommandArgumentSpec[],
@@ -374,7 +381,7 @@ export async function parseCommandArguments(
 
     const outcome = await parseValue(spec, raw, ctx)
     if (!outcome.ok) {
-      if (outcome.message) return { ok: false, message: outcome.message }
+      if (outcome.message || outcome.handled) return { ok: false, message: outcome.message, handled: outcome.handled }
       if (spec.nullable) { values[spec.name] = undefined; continue }
       return { ok: false }
     }
@@ -399,6 +406,6 @@ export async function resolveCommandArguments(
   const result = await parseCommandArguments(specs, ctx.args, ctx)
   if (result.ok) return result.values
 
-  await reply(ctx, result.message ?? `Uso: \`${usage}\``)
+  if (!result.handled) await reply(ctx, result.message ?? `Uso: \`${usage}\``)
   return null
 }

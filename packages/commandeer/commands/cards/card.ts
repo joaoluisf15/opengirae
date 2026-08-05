@@ -1,4 +1,4 @@
-import { Command, QuickView, CommandArgument, CommandArgumentType } from '@girae/common/commands'
+import { Command, QuickView, Page, CommandArgument, CommandArgumentType } from '@girae/common/commands'
 import { reply, type ButtonSpec } from '@girae/common/dbos/messaging'
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
@@ -12,6 +12,22 @@ import { resolveDisplayEmoji } from '@girae/common/utilities/customEmoji'
 type CardDetails = NonNullable<Awaited<ReturnType<typeof CardsDB.getCardWithDetails>>>
 
 export const FALLBACK_IMAGE = 'https://placehold.co/900x1260/png'
+
+const CARD_SEARCH_PAGE_SIZE = 10
+
+export async function renderCardSearchResults(query: string, page: number) {
+  const results = await CardsDB.searchCardsByName(query, 100)
+  const totalPages = Math.max(1, Math.ceil(results.length / CARD_SEARCH_PAGE_SIZE))
+  const slice = results.slice(page * CARD_SEARCH_PAGE_SIZE, (page + 1) * CARD_SEARCH_PAGE_SIZE)
+  const lines = slice.map(c => `${c.rarityEmoji} \`${c.id}\`. **${escapeMarkdown(c.name)}** ${c.categoryEmoji ?? ''} _${escapeMarkdown(c.subcategoryName ?? '')}_`)
+  const pageInfo = totalPages > 1 ? `\n\n${EMOJI.page} Página \`${page + 1}\` de **${totalPages}**` : ''
+
+  return {
+    content: `🔎 **${results.length}** resultados encontrados:\n\n${lines.join('\n')}${pageInfo}\n\nUse o ID para especificar.`,
+    hasNext: page < totalPages - 1,
+    totalPages,
+  }
+}
 
 async function showCard(ctx: IncomingCommand, card: CardDetails) {
   const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
@@ -60,9 +76,14 @@ export default class CardCommand extends Command {
     aliases: ['view', 'ver'],
   }
 
-  @CommandArgument([{ name: 'card', type: CommandArgumentType.CARD, description: 'ID ou nome do personagem' }])
+  @CommandArgument([{ name: 'card', type: CommandArgumentType.CARD, paginatedAmbiguous: true, description: 'ID ou nome do personagem' }])
   static override async execute(ctx: IncomingCommand, args: { card: CardDetails }) {
     await showCard(ctx, args.card)
+  }
+
+  @Page({ name: 'cardsearch', restricted: true })
+  static async cardSearchPage(arg: string, page: number) {
+    return renderCardSearchResults(arg, page)
   }
 
   @QuickView({ name: 'cardinfo' })
