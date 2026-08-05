@@ -2,7 +2,7 @@
 	import { List, Checkbox, Stepper } from 'konsta/svelte';
 	import { scale, slide } from 'svelte/transition';
 
-	type Card = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number };
+	type Card = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number; tradable?: boolean };
 
 	let {
 		cards,
@@ -60,6 +60,9 @@
 				</div>
 				{#if card.ownedCount > 1}
 					<div class="shrink-0 text-sm text-black/55 dark:text-white/55">x{card.ownedCount}</div>
+				{/if}
+				{#if card.tradable === false}
+					<div class="shrink-0 text-sm" title="Não tradeable">🚫</div>
 				{/if}
 			</button>
 			{#if selectionMode && selectedIds?.has(card.id) && card.ownedCount > 1}
