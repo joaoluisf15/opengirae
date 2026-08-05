@@ -86,9 +86,16 @@ export class GachaLogic {
   static selectCard(pool: CardForDraw[], luckModifier: number): CardForDraw | undefined {
     if (pool.length === 0) return undefined;
 
+    // a tier's *total* pull-weight must not scale with how many cards happen to be catalogued at
+    // that tier - dividing by tier size keeps a rarity's total probability mass fixed regardless
+    // of catalog size, instead of every extra common diluting the rest of the pool.
+    const countByRank = new Map<number, number>();
+    for (const c of pool) countByRank.set(c.rank, (countByRank.get(c.rank) ?? 0) + 1);
+
     let totalWeight = 0;
     const weights = pool.map(card => {
-      const weight = card.rarityWeight * (card.rarityModifier / 100) * Math.pow(luckModifier / 100, card.rank);
+      const tierSize = countByRank.get(card.rank) ?? 1;
+      const weight = (card.rarityWeight / tierSize) * (card.rarityModifier / 100) * Math.pow(luckModifier / 100, card.rank);
       totalWeight += weight;
       return weight;
     });

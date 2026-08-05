@@ -73,4 +73,34 @@ describe("GachaLogic.selectCard", () => {
     expect(id1Hits / trials).toBeGreaterThan(0.85);
     expect(id1Hits / trials).toBeLessThan(0.95);
   });
+
+  test("adding more common cards to a subcategory doesn't dilute a fixed rare tier's total hit rate (regression for the imbalance where large-catalog subcategories became much harder to pull rares from than small ones)", () => {
+    const trials = 50000;
+
+    function rareHitRate(commonCount: number): number {
+      const pool: CardForDraw[] = [];
+      for (let i = 0; i < commonCount; i++) pool.push(card({ id: i, rank: 0, rarityWeight: 1000 }));
+      pool.push(card({ id: 9999, rank: 1, rarityWeight: 100 }));
+
+      let rareHits = 0;
+      for (let i = 0; i < trials; i++) {
+        if (GachaLogic.selectCard(pool, 100)!.rank === 1) rareHits++;
+      }
+      return rareHits / trials;
+    }
+
+    const rateWith1Common = rareHitRate(1);
+    const rateWith5Commons = rareHitRate(5);
+    const rateWith15Commons = rareHitRate(15);
+
+    // eslint-disable-next-line no-console
+    console.log(`rare hit rate — 1 common: ${rateWith1Common.toFixed(4)}, 5 commons: ${rateWith5Commons.toFixed(4)}, 15 commons: ${rateWith15Commons.toFixed(4)} (expected ≈ 100/1100 ≈ 0.0909 in all three cases)`);
+
+    // before the fix, rateWith15Commons would be roughly 15x lower than rateWith1Common - this
+    // asserts they instead land in the same band regardless of how many commons exist.
+    for (const rate of [rateWith1Common, rateWith5Commons, rateWith15Commons]) {
+      expect(rate).toBeGreaterThan(0.07);
+      expect(rate).toBeLessThan(0.11);
+    }
+  });
 });
