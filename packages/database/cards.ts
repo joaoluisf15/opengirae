@@ -766,6 +766,44 @@ export class CardsDB {
       .limit(limit);
   })
 
+  static mergeCards = maybeTransaction('mergeCards', async (client, sourceId: number, targetId: number) => {
+    // sum-on-conflict, same shape as UsersDB.mergeUsers - sql.identifier() avoids hand-typed column names, which INSERT/ON CONFLICT require unqualified.
+    await client.execute(sql`
+      INSERT INTO ${userCards} (${sql.identifier(userCards.userId.name)}, ${sql.identifier(userCards.cardId.name)}, ${sql.identifier(userCards.count.name)}, ${sql.identifier(userCards.tradable.name)}, ${sql.identifier(userCards.updatedAt.name)})
+      SELECT ${userCards.userId}, ${targetId}, ${userCards.count}, ${userCards.tradable}, now() FROM ${userCards} WHERE ${userCards.cardId} = ${sourceId}
+      ON CONFLICT (${sql.identifier(userCards.userId.name)}, ${sql.identifier(userCards.cardId.name)}) DO UPDATE SET ${sql.identifier(userCards.count.name)} = ${userCards}.${sql.identifier(userCards.count.name)} + excluded.${sql.identifier(userCards.count.name)}
+    `);
+    await client.delete(userCards).where(eq(userCards.cardId, sourceId));
+
+    await client.execute(sql`
+      INSERT INTO ${wishlist} (${sql.identifier(wishlist.userId.name)}, ${sql.identifier(wishlist.cardId.name)}, ${sql.identifier(wishlist.position.name)}, ${sql.identifier(wishlist.createdAt.name)})
+      SELECT ${wishlist.userId}, ${targetId}, ${wishlist.position}, ${wishlist.createdAt} FROM ${wishlist} WHERE ${wishlist.cardId} = ${sourceId}
+      ON CONFLICT (${sql.identifier(wishlist.userId.name)}, ${sql.identifier(wishlist.cardId.name)}) DO NOTHING
+    `);
+    await client.delete(wishlist).where(eq(wishlist.cardId, sourceId));
+
+    // composite PK (sessionId, cardId) - same sum-on-conflict shape as user_cards, a session could already hold both cards.
+    await client.execute(sql`
+      INSERT INTO ${hipotecaHoldings} (${sql.identifier(hipotecaHoldings.sessionId.name)}, ${sql.identifier(hipotecaHoldings.cardId.name)}, ${sql.identifier(hipotecaHoldings.count.name)}, ${sql.identifier(hipotecaHoldings.tradable.name)}, ${sql.identifier(hipotecaHoldings.customEmoji.name)}, ${sql.identifier(hipotecaHoldings.customMediaUrl.name)}, ${sql.identifier(hipotecaHoldings.customMediaType.name)})
+      SELECT ${hipotecaHoldings.sessionId}, ${targetId}, ${hipotecaHoldings.count}, ${hipotecaHoldings.tradable}, ${hipotecaHoldings.customEmoji}, ${hipotecaHoldings.customMediaUrl}, ${hipotecaHoldings.customMediaType} FROM ${hipotecaHoldings} WHERE ${hipotecaHoldings.cardId} = ${sourceId}
+      ON CONFLICT (${sql.identifier(hipotecaHoldings.sessionId.name)}, ${sql.identifier(hipotecaHoldings.cardId.name)}) DO UPDATE SET ${sql.identifier(hipotecaHoldings.count.name)} = ${hipotecaHoldings}.${sql.identifier(hipotecaHoldings.count.name)} + excluded.${sql.identifier(hipotecaHoldings.count.name)}
+    `);
+    await client.delete(hipotecaHoldings).where(eq(hipotecaHoldings.cardId, sourceId));
+
+    await client.update(cardDrawHistory).set({ cardId: targetId }).where(eq(cardDrawHistory.cardId, sourceId));
+    await client.update(cardCustomizationSubmissions).set({ cardId: targetId }).where(eq(cardCustomizationSubmissions.cardId, sourceId));
+    await client.update(users).set({ favoriteCardId: targetId }).where(eq(users.favoriteCardId, sourceId));
+
+    // the source's own subcategory tags aren't meaningful on the target (which has its own) - drop, don't move.
+    await client.delete(cardSubcategories).where(eq(cardSubcategories.cardId, sourceId));
+
+    // array columns - a plain UPDATE can't touch individual elements, array_replace swaps every occurrence in place.
+    await client.execute(sql`UPDATE ${trades} SET ${sql.identifier(trades.cardsUser1.name)} = array_replace(${trades.cardsUser1}, ${sourceId}, ${targetId}) WHERE ${sourceId} = ANY(${trades.cardsUser1})`);
+    await client.execute(sql`UPDATE ${trades} SET ${sql.identifier(trades.cardsUser2.name)} = array_replace(${trades.cardsUser2}, ${sourceId}, ${targetId}) WHERE ${sourceId} = ANY(${trades.cardsUser2})`);
+
+    await client.delete(cards).where(eq(cards.id, sourceId));
+  })
+
   static getCardOwnerCount = maybeTransaction('getCardOwnerCount', async (client, cardId: number): Promise<number> => {
     const result = await client
       .select({ total: sql<number>`CAST(COUNT(*) AS INTEGER)` })
