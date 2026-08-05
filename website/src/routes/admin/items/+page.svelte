@@ -152,7 +152,7 @@
 				</div>
 				<div class="flex items-center justify-between gap-3 p-3">
 					<div class="min-w-0">
-						<p class="text-ink truncate text-sm font-medium">{item.title}</p>
+						<p class="text-ink truncate text-sm font-medium">{item.title}<span class="text-ink-dim font-normal"> · {item.id}</span></p>
 						<p class="text-ink-dim text-xs">
 							{item.price} moedas
 							{#if !item.isAvailable}· oculto{/if}
@@ -179,7 +179,7 @@
 				</div>
 				<div class="flex items-start justify-between gap-2 p-3">
 					<div class="min-w-0">
-						<p class="text-ink truncate text-sm font-medium">{item.title}</p>
+						<p class="text-ink truncate text-sm font-medium">{item.title}<span class="text-ink-dim font-normal"> · {item.id}</span></p>
 						<p class="text-ink-dim text-xs">
 							{item.price} moedas
 							{#if !item.isAvailable}· oculto{/if}
