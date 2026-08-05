@@ -7,7 +7,7 @@ import { UsersDB } from '@girae/database/users'
 import type { IncomingCommand } from '@girae/common/commands/types'
 import { NEGOTIATION_TOPIC } from '../cards/trade'
 
-const WELCOME_MESSAGE = `**👾 Boas-vindas à Giraê!**\n\n🕹 Digite / para ver meus comandos. O mais importante é, obviamente, o /girar.\n\n📢 Para usar a bot, entre no nosso canal @undergirae [clicando aqui](https://t.me/undergirae).`
+const WELCOME_MESSAGE = `**👾 Boas-vindas à Giraê!**\n\n🕹 Digite / para ver meus comandos. O mais importante é, obviamente, o /girar.\n\n📢 Para usar a bot, entre no nosso canal @canalgirae [clicando aqui](https://t.me/canalgirae).`
 
 export default class StartCommand extends Command {
   static override info = {
