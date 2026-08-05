@@ -93,6 +93,7 @@ export const pageWorker = new Worker(PAGE_QUEUE_NAME, async (job) => {
   const result: {
     content: string
     photoUrl?: string
+    isVideo?: boolean
     hasNext: boolean
     totalPages?: number
     extraRows?: Array<Array<{ text: string; arg: string; page: number }>>
@@ -117,6 +118,7 @@ export const pageWorker = new Worker(PAGE_QUEUE_NAME, async (job) => {
       messageId,
       content: result.content,
       photoUrl: result.photoUrl,
+      isVideo: result.isVideo,
       platform,
       buttons: buttons.length ? buttons : undefined,
     } satisfies PendingResponse),

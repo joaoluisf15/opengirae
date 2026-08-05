@@ -82,7 +82,7 @@ export interface PageOptions {
   restricted?: boolean;
 }
 
-// registers a static `(arg: string, page: number, authorId: string) => Promise<{content, photoUrl?, hasNext} | null>`
+// registers a static `(arg: string, page: number, authorId: string) => Promise<{content, photoUrl?, isVideo?, hasNext} | null>`
 // method as a stateless pagination handler
 export function Page(options: PageOptions) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {

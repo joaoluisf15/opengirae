@@ -60,6 +60,7 @@ export interface PendingResponse {
   method: 'sendMessage' | 'sendPhoto' | 'sendAnimation' | 'sendVideo' | 'sendAudio' | 'editMessageMedia' | 'editMessageCaption' | 'editMessageText' | 'deleteMessage' | 'answerCallbackQuery';
   content?: string;
   photoUrl?: string;
+  isVideo?: boolean;
   audioUrl?: string;
   audioFileId?: string;
   audio?: { entryId: number; performer?: string; title?: string; thumbnailUrl?: string };
