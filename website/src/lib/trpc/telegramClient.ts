@@ -7,7 +7,12 @@ export const telegramTrpc = createTRPCProxyClient<Router>({
 		httpBatchLink({
 			url: '/trpc',
 			headers: () => {
-				const initDataRaw = retrieveRawInitData();
+				let initDataRaw: string | undefined;
+				try {
+					initDataRaw = retrieveRawInitData();
+				} catch {
+					initDataRaw = undefined;
+				}
 				return initDataRaw ? { 'x-tma-init-data': initDataRaw } : {};
 			},
 		}),
