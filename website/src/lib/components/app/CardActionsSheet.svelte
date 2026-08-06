@@ -3,7 +3,7 @@
 	import { telegramTrpc } from '$lib/trpc/telegramClient';
 	import DiscardConfirmDialog from './DiscardConfirmDialog.svelte';
 
-	type Card = { id: number; name: string; imageUrl: string | null; rarityEmoji: string; rarityName: string; ownedCount: number };
+	type Card = { id: number; name: string; imageUrl: string | null; rarityEmoji: string; rarityName: string; ownedCount: number; tradable: boolean };
 
 	let {
 		card,
@@ -21,7 +21,8 @@
 	let discarding = $state(false);
 	let favoriteCardId = $state<number | null>(null);
 	let onWishlist = $state(false);
-	let tradable = $state(false);
+	// mirrors card.tradable at fetch time, kept separate since toggleTradable below mutates it locally for instant UI feedback.
+	let ownTradableToggle = $state(false);
 
 	let owned = $derived(!!card && card.ownedCount > 0);
 
@@ -29,7 +30,7 @@
 		if (card && !readOnly) {
 			telegramTrpc.telegram.cards.myFavoriteCardId.query().then((id) => (favoriteCardId = id));
 			telegramTrpc.telegram.cards.wishlistStatus.query({ cardId: card.id }).then((status) => (onWishlist = status));
-			if (card.ownedCount > 0) telegramTrpc.telegram.cards.tradableStatus.query({ cardId: card.id }).then((status) => (tradable = status));
+			if (card.ownedCount > 0) telegramTrpc.telegram.cards.tradableStatus.query({ cardId: card.id }).then((status) => (ownTradableToggle = status));
 		}
 	});
 
@@ -58,7 +59,7 @@
 	function toggleTradable() {
 		if (!card) return;
 		const cardId = card.id;
-		const next = !tradable;
+		const next = !ownTradableToggle;
 		onClose();
 		telegramTrpc.telegram.cards.setTradable.mutate({ cardId, tradable: next });
 	}
@@ -81,7 +82,12 @@
 			{#if card}
 				<div class="flex flex-col items-center justify-center gap-2 h-full w-full">
 					{#if card.imageUrl}
-						<img src={card.imageUrl} alt={card.name} class="ios:rounded-lg material:rounded aspect-[3/4] w-15 object-cover" />
+						<div class="relative">
+							<img src={card.imageUrl} alt={card.name} class="ios:rounded-lg material:rounded aspect-[3/4] w-15 object-cover {readOnly && !card.tradable ? 'grayscale opacity-60' : ''}" />
+							{#if !card.tradable}
+								<span class="absolute -top-1 -right-1 text-xs" title="Não tradeable">🚫</span>
+							{/if}
+						</div>
 					{/if}
 					<span>{card.rarityEmoji} {card.name}</span>
 				</div>
@@ -97,7 +103,7 @@
 					{card && card.id === favoriteCardId ? 'Carta favorita atual' : 'Marcar como favorita'}
 				</ActionsButton>
 				<ActionsButton onClick={toggleTradable}>
-					{tradable ? 'Marcar como não trocável' : 'Marcar como trocável'}
+					{ownTradableToggle ? 'Marcar como não trocável' : 'Marcar como trocável'}
 				</ActionsButton>
 				<ActionsButton onClick={() => (confirmOpen = true)} colors={{ textIos: 'text-red-500', textMaterial: 'text-red-500' }}>Deletar card</ActionsButton>
 			{/if}

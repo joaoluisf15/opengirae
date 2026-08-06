@@ -8,7 +8,7 @@
 	import CardActionsSheet from './CardActionsSheet.svelte';
 
 	type Progress = { subcategoryId: number; subcategoryName: string; categoryName: string; imageUrl: string | null; owned: number; total: number; isGoal: boolean };
-	type CardRow = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number };
+	type CardRow = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number; tradable: boolean };
 	type ViewMode = 'default' | 'closest' | 'completed';
 
 	const PAGE_SIZE = 20;
@@ -36,6 +36,8 @@
 	let detail = $state<Progress | undefined>(undefined);
 	let stats = $state<{ completed: number; total: number } | undefined>(undefined);
 	let actionsCard = $state<CardRow | undefined>(undefined);
+	let myName = $state<string | undefined>(undefined);
+	telegramTrpc.telegram.cards.myDisplayName.query().then((name) => (myName = name));
 
 	$effect(() => {
 		searchQuery;
@@ -57,7 +59,7 @@
 	/>
 {:else}
 	<Page class="pb-safe-24">
-		<Navbar title="Coleções">
+		<Navbar title={myName ? `Coleções de ${myName}` : 'Coleções'}>
 			{#snippet subnavbar()}
 				<Searchbar value={searchQuery} onInput={(e: Event) => (searchQuery = (e.target as HTMLInputElement).value)} onClear={() => (searchQuery = '')} placeholder="Pesquisar..." />
 			{/snippet}

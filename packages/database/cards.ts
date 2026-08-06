@@ -1486,7 +1486,7 @@ export class CardsDB {
 
     type CardRow = {
       subcategoryId: number; id: number; name: string; imageUrl: string | null;
-      rarityName: string; rarityEmoji: string; ownedCount: number;
+      rarityName: string; rarityEmoji: string; ownedCount: number; tradable: boolean;
     };
     const subcategoryIds = subcategoryRows.map(r => r.subcategoryId);
     const cardsBySubcategory = new Map<number, CardRow[]>();
@@ -1505,6 +1505,7 @@ export class CardsDB {
           rarityName: rarities.name,
           rarityEmoji: rarities.emoji,
           ownedCount: userCards.count,
+          tradable: userCards.tradable,
         })
         .from(userCards)
         .innerJoin(cards, eq(cards.id, userCards.cardId))

@@ -81,6 +81,11 @@ export const telegramCardsRouter = t.router({
 		return user.favoriteCardId;
 	}),
 
+	myDisplayName: telegramProcedure.query(async ({ ctx }) => {
+		const user = await requireUser(ctx.tgUser.id.toString());
+		return user.displayName;
+	}),
+
 	setFavorite: telegramProcedure
 		.input(z.object({ cardId: z.number().int().positive() }))
 		.mutation(async ({ ctx, input }) => {
@@ -95,14 +100,15 @@ export const telegramCardsRouter = t.router({
 	subcategoryCards: telegramProcedure
 		.input(z.object({
 			subcategoryId: z.number().int().positive(),
+			targetUserId: z.number().int().positive().optional(),
 			ownedFilter: z.enum(['owned', 'missing']).optional(),
 			limit: z.number().int().positive().max(100).optional(),
 			offset: z.number().int().nonnegative().optional(),
 		}))
 		.query(async ({ ctx, input }) => {
-			const user = await requireUser(ctx.tgUser.id.toString());
-			const { subcategoryId, ...opts } = input;
-			return CardsDB.getCardsInSubcategoryForUserPaginated(subcategoryId, user.id, opts);
+			const { subcategoryId, targetUserId, ...opts } = input;
+			const subject = await resolveViewSubject(ctx, targetUserId);
+			return CardsDB.getCardsInSubcategoryForUserPaginated(subcategoryId, subject.id, opts);
 		}),
 
 	wishlist: telegramProcedure.input(viewingInput).query(async ({ ctx, input }) => {

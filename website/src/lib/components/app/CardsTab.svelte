@@ -10,7 +10,7 @@
 	import SubcategoryDetailView from './SubcategoryDetailView.svelte';
 	import InfiniteScrollSentinel from './InfiniteScrollSentinel.svelte';
 
-	type CardRow = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number };
+	type CardRow = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number; tradable: boolean };
 	type Section = { subcategoryId: number; subcategoryName: string; categoryEmoji: string; categoryName: string; total: number; cards: CardRow[] };
 	type WishlistCard = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string };
 
@@ -153,6 +153,8 @@
 	<SubcategoryDetailView
 		subcategoryId={detailSection.subcategoryId}
 		subcategoryName={detailSection.subcategoryName}
+		viewingUserId={targetUserIdForQuery()}
+		{readOnly}
 		{onBack}
 		onOpenActions={(c) => (actionsCard = c)}
 	/>
@@ -196,6 +198,7 @@
 						selectionMode={selectionMode && !readOnly}
 						{selectedIds}
 						{quantities}
+						{readOnly}
 						onToggleSelect={toggleSelect}
 						onQuantityChange={setQuantity}
 						onOpenActions={(c) => (actionsCard = c)}

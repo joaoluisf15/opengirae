@@ -2,13 +2,14 @@
 	import { List, Checkbox, Stepper } from 'konsta/svelte';
 	import { scale, slide } from 'svelte/transition';
 
-	type Card = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number; tradable?: boolean };
+	type Card = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; ownedCount: number; tradable: boolean };
 
 	let {
 		cards,
 		selectionMode = false,
 		selectedIds,
 		quantities,
+		readOnly = false,
 		onToggleSelect,
 		onQuantityChange,
 		onOpenActions,
@@ -17,6 +18,7 @@
 		selectionMode?: boolean;
 		selectedIds?: Set<number>;
 		quantities?: Record<number, number>;
+		readOnly?: boolean;
 		onToggleSelect?: (cardId: number) => void;
 		onQuantityChange?: (cardId: number, quantity: number) => void;
 		onOpenActions?: (card: Card) => void;
@@ -50,7 +52,7 @@
 					</div>
 				{/if}
 				{#if card.imageUrl}
-					<div class="aspect-3/4 w-12 shrink-0 rounded-lg bg-cover bg-center" style={`background-image: url(${card.imageUrl})`}></div>
+					<div class="aspect-3/4 w-12 shrink-0 rounded-lg bg-cover bg-center {readOnly && !card.tradable ? 'grayscale opacity-60' : ''}" style={`background-image: url(${card.imageUrl})`}></div>
 				{:else}
 					<div class="aspect-3/4 w-12 shrink-0 rounded-lg bg-black/10 dark:bg-white/10"></div>
 				{/if}

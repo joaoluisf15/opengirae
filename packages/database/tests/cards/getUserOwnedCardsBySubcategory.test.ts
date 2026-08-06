@@ -37,4 +37,14 @@ describe("CardsDB.getUserOwnedCardsBySubcategory", () => {
     const result = await CardsDB.getUserOwnedCardsBySubcategory(userId, { query: "zzzznonexistentzzzz" });
     expect(result.rows.find(r => r.subcategoryId === subcategoryId)).toBeUndefined();
   });
+
+  test("reports tradable per card", async () => {
+    const result = await CardsDB.getUserOwnedCardsBySubcategory(userId, { query: "Subcat Group Card" });
+    const firstCard = result.rows[0]!.cards[0]!;
+    expect(firstCard).toHaveProperty('tradable');
+
+    await db.update(userCards).set({ tradable: true }).where(eq(userCards.cardId, firstCard.id));
+    const refreshed = await CardsDB.getUserOwnedCardsBySubcategory(userId, { query: "Subcat Group Card" });
+    expect(refreshed.rows[0]!.cards.find(c => c.id === firstCard.id)?.tradable).toBe(true);
+  });
 });

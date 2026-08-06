@@ -16,12 +16,16 @@
 		subcategoryId,
 		subcategoryName,
 		initialIsGoal,
+		viewingUserId,
+		readOnly = false,
 		onBack,
 		onOpenActions,
 	}: {
 		subcategoryId: number;
 		subcategoryName: string;
 		initialIsGoal?: boolean;
+		viewingUserId?: number;
+		readOnly?: boolean;
 		onBack: () => void;
 		onOpenActions?: (card: Row) => void;
 	} = $props();
@@ -37,7 +41,7 @@
 	}
 
 	const cards = createPaginatedList<Row, Result>(
-		(offset) => telegramTrpc.telegram.cards.subcategoryCards.query({ subcategoryId, ownedFilter: tab, limit: PAGE_SIZE, offset }),
+		(offset) => telegramTrpc.telegram.cards.subcategoryCards.query({ subcategoryId, targetUserId: viewingUserId, ownedFilter: tab, limit: PAGE_SIZE, offset }),
 		(result) => {
 			ownedCount = result.ownedCount;
 			missingCount = result.missingCount;
@@ -93,7 +97,7 @@
 	{#if cards.resetLoading}
 		<div class="flex justify-center p-8"><Preloader /></div>
 	{:else}
-		<CardRows cards={filteredItems} {onOpenActions} />
+		<CardRows cards={filteredItems} {readOnly} {onOpenActions} />
 		<InfiniteScrollSentinel disabled={cards.items.length >= cards.total} loading={cards.loading} onIntersect={cards.loadMore} />
 	{/if}
 </Page>
