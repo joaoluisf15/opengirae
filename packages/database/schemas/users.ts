@@ -32,6 +32,7 @@ export const users = pgTable("users", {
 
   maxDraws: integer().notNull().default(24),
   usedDraws: integer().notNull().default(0),
+  giroPackagesBoughtToday: integer().notNull().default(0),
   hasGottenDaily: boolean().notNull().default(false),
   dailyStreak: integer().notNull().default(0),
   hasJoinedSupportChannel: boolean().notNull().default(false),

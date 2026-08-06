@@ -3,12 +3,21 @@ import { userCards, wishlist, cardDrawHistory, trades } from "./schemas/cards";
 import { boughtItems } from "./schemas/vanities";
 import { auditLogs } from "./schemas/audit";
 import { EconomyDB } from "./economy";
+import { economy } from "./schemas/economy";
 import { maybeTransaction } from "./decorators";
 import { eq, sql, and, or, gte, ilike, desc } from "drizzle-orm";
 
 export type Platform = 'telegram' | 'discord' | 'none';
 
 type UserSortField = 'displayName' | 'coins' | 'usedDraws' | 'isBanned' | 'isAdmin';
+
+export const GIRO_PACKAGE_TIERS = [
+  { giros: 10, price: 10000 },
+  { giros: 15, price: 20000 },
+  { giros: 20, price: 30000 },
+  { giros: 25, price: 40000 },
+  { giros: 30, price: 50000 },
+] as const;
 
 export class UsersDB {
   static listUsers = maybeTransaction('listUsers', async (client, opts: {
@@ -177,7 +186,7 @@ export class UsersDB {
 
     await client
       .update(users)
-      .set({ hasGottenDaily: false, hasGivenRepToday: false });
+      .set({ hasGottenDaily: false, hasGivenRepToday: false, giroPackagesBoughtToday: 0 });
   })
 
   static setRepGiven = maybeTransaction('setRepGiven', async (client, userId: number) => {
@@ -298,6 +307,32 @@ export class UsersDB {
       .set({ 
         usedDraws: sql`CASE WHEN ${users.usedDraws} < 0 THEN ${users.usedDraws} ELSE GREATEST(${users.usedDraws} - ${amount}, 0) END` 
       });
+  })
+
+  // single guarded UPDATE claims the tier slot, spends coins, and grants draws atomically -
+  // zero rows updated covers insufficient funds, a stale/already-claimed tier, and exhaustion
+  // all at once; the caller re-reads the row afterward to report which one it was.
+  static buyGiroPackage = maybeTransaction('buyGiroPackage', async (
+    client, userId: number, expectedTierIndex: number, price: number, giros: number
+  ): Promise<{ ok: true } | { ok: false }> => {
+    const [updated] = await client
+      .update(users)
+      .set({
+        coins: sql`${users.coins} - ${price}`,
+        giroPackagesBoughtToday: sql`${users.giroPackagesBoughtToday} + 1`,
+        usedDraws: sql`${users.usedDraws} - ${giros}`,
+        treasuryContributed: sql`${users.treasuryContributed} + ${price}`,
+      })
+      .where(and(
+        eq(users.id, userId),
+        gte(users.coins, price),
+        eq(users.giroPackagesBoughtToday, expectedTierIndex),
+      ))
+      .returning();
+    if (!updated) return { ok: false };
+
+    await client.update(economy).set({ treasuryBalance: sql`${economy.treasuryBalance} + ${price}` });
+    return { ok: true };
   })
 
   static giveTemporaryDraws = maybeTransaction('giveTemporaryDraws', async (client, userId: number, amount: number) => {

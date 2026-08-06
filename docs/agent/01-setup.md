@@ -68,6 +68,24 @@ copy `website/.env.example` to `website/.env` too if you're touching the
 Mini App or admin panel. It needs the *same* `TELEGRAM_TOKEN` duplicated in,
 since `telegramProcedure` validates Mini App init-data against it.
 
+The Mini App (`/app` routes) has *two* gates that both need real Telegram
+init-data: `+layout.svelte` client-side (shows "only works in Telegram"
+otherwise) and `telegramProcedure` server-side (rejects the tRPC call
+otherwise). Normally the only way past both is a BotFather-configured tunnel
+(see step 6 below). For loading it directly in a browser during local dev,
+set `website/.env`'s
+`BYPASS_TELEGRAM_AUTH_DO_NOT_USE_THIS_IN_PROD_PRETTY_PLEASE=1`. This is a
+private (non-`PUBLIC_`) var, read server-side in both places —
+`telegramProcedure` (`website/src/lib/trpc/middleware/telegramAuth.ts`)
+directly, and `app/+layout.server.ts` reads it and passes the boolean down
+as page data for `+layout.svelte` to use, since Svelte components can't read
+private env vars directly. It falls back to whichever user is linked as
+telegram id `"1"`; that user must already exist (e.g. from a real bot
+interaction) — the bypass doesn't create one, it just skips the init-data
+check. Never set this in a real deployment; it has no other gate besides the
+env var itself. Changing it requires a dev-server restart (`bun run dev`)
+to take effect — SvelteKit reads env vars at server start, not per-request.
+
 ## 4. Run database migrations
 
 ```sh
