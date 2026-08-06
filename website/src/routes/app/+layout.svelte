@@ -5,7 +5,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 
-	let { children } = $props();
+	let { children, data } = $props();
+	const authBypassed = data.authBypassed;
 
 	type GateState = 'loading' | 'ready' | 'no-init-data';
 	let gateState = $state<GateState>('loading');
@@ -13,6 +14,11 @@
 	let isDark = $state(typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
 	$effect(() => {
+		if (authBypassed) {
+			gateState = 'ready';
+			return;
+		}
+
 		try {
 			init();
 		} catch (e) {
