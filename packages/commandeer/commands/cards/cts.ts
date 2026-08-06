@@ -7,7 +7,10 @@ import { EMOJI, cativeiroEmoji } from '../../constants'
 import { applyFilters, filterAdviceText, filterButtonsRow, parseFilterArg, type FilterDef } from '@girae/common/utilities/pageFilters'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
+
+// telegram caption cap is 1024 chars (vs 4096 for plain text) - names are unbounded, so this stays as a fallback even with the smaller page size
+const MAX_CONTENT_LENGTH_FOR_PHOTO = 700
 
 type OwnedCardRow = Awaited<ReturnType<typeof CardsDB.getUserOwnedCards>>[number]
 
@@ -27,7 +30,7 @@ async function resolveFavoriteCardMedia(userId: number, favoriteCardId: number |
   return { photoUrl, isVideo: owned?.customMediaType === 'video' }
 }
 
-async function renderPage(rawArg: string, page: number, viewerTelegramId: string, platform: 'telegram' | 'discord') {
+export async function renderPage(rawArg: string, page: number, viewerTelegramId: string, platform: 'telegram' | 'discord') {
   const { active } = parseFilterArg(rawArg)
 
   const viewer = await UsersDB.getUserByPlatformAccount(platform, viewerTelegramId)
@@ -55,7 +58,9 @@ ${rows}
 
 ${pageInfo}${EMOJI.browse} Para ver um desses cards, use \`/card id\`.`
 
-  const media = await resolveFavoriteCardMedia(viewer.id, viewer.favoriteCardId)
+  const media = content.length <= MAX_CONTENT_LENGTH_FOR_PHOTO
+    ? await resolveFavoriteCardMedia(viewer.id, viewer.favoriteCardId)
+    : {}
 
   return {
     content,
