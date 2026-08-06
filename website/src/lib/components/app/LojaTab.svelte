@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Page, Navbar, Searchbar, Segmented, SegmentedButton, BlockTitle, Link, Preloader, Chip } from 'konsta/svelte';
+	import { Page, Navbar, Searchbar, Segmented, SegmentedButton, BlockTitle, Link, Preloader, Chip, Card, Block, Button } from 'konsta/svelte';
 	import { telegramTrpc } from '$lib/trpc/telegramClient';
 	import StoreItemCard from './StoreItemCard.svelte';
 	import StoreItemDetailView from './StoreItemDetailView.svelte';
@@ -11,6 +11,14 @@
 	const PAGE_SIZE = 20;
 
 	let type = $state<'background' | 'sticker'>('background');
+	let mode = $state<'store' | 'cards'>('store');
+
+	type GiroTier = { tierIndex: number; exhausted: boolean; giros: number | null; price: number | null; resetsAt: string };
+	let giroTier = $state<GiroTier | null>(null);
+	let giroLoading = $state(false);
+	let giroPurchasing = $state(false);
+	let giroError = $state<string | null>(null);
+
 	let searchQuery = $state('');
 	let ownedIds = $state<number[]>([]);
 	let equippedIds = $state<{ background: number | null; sticker: number | null }>({ background: null, sticker: null });
@@ -53,6 +61,29 @@
 		balance = myBalance;
 		homeLoading = false;
 		homeLoadedOnce = true;
+	}
+
+	async function loadGiroTier() {
+		giroLoading = true;
+		giroTier = await telegramTrpc.telegram.store.giroTier.query();
+		giroLoading = false;
+	}
+
+	async function buyGiro() {
+		giroPurchasing = true;
+		giroError = null;
+		const result = await telegramTrpc.telegram.store.buyGiroTier.mutate();
+		giroPurchasing = false;
+		if (!result.ok) {
+			if (result.reason === 'insufficient_funds') {
+				giroError = 'Moedas insuficientes.';
+			} else {
+				await loadGiroTier(); // exhausted/race - re-fetch so the panel shows the real current state
+			}
+			return;
+		}
+		await loadGiroTier();
+		balance = await telegramTrpc.telegram.store.balance.query();
 	}
 
 	function queryForSection(section: Section) {
@@ -104,6 +135,10 @@
 		if (searchQuery) loadSearch(true);
 	});
 
+	$effect(() => {
+		if (mode === 'cards' && !giroTier) loadGiroTier();
+	});
+
 	function isOwned(id: number) {
 		return ownedIds.includes(id);
 	}
@@ -133,12 +168,39 @@
 	</Navbar>
 	<div class="p-4">
 		<Segmented strong>
-			<SegmentedButton strong active={type === 'background'} onClick={() => (type = 'background')}>Backgrounds</SegmentedButton>
-			<SegmentedButton strong active={type === 'sticker'} onClick={() => (type = 'sticker')}>Stickers</SegmentedButton>
+			<SegmentedButton strong active={mode === 'store' && type === 'background'} onClick={() => { mode = 'store'; type = 'background'; }}>Backgrounds</SegmentedButton>
+			<SegmentedButton strong active={mode === 'store' && type === 'sticker'} onClick={() => { mode = 'store'; type = 'sticker'; }}>Stickers</SegmentedButton>
+			<SegmentedButton strong active={mode === 'cards'} onClick={() => (mode = 'cards')}>Cards</SegmentedButton>
 		</Segmented>
 	</div>
 
-	{#if searchQuery}
+	{#if mode === 'cards'}
+		<BlockTitle>Comprar giros</BlockTitle>
+		{#if giroLoading && !giroTier}
+			<div class="flex justify-center p-8"><Preloader /></div>
+		{:else if giroTier}
+			<Block>
+				<Card outline class="m-0!">
+					{#if giroTier.exhausted}
+						<div class="text-black dark:text-white">
+							Você já comprou todos os pacotes de hoje. Volte às {new Date(giroTier.resetsAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+						</div>
+					{:else}
+						<div class="font-bold text-black dark:text-white">{giroTier.giros} giros</div>
+						<div class="mt-1 text-sm text-black/55 dark:text-white/55">{giroTier.price} moedas</div>
+						{#if giroError}<p class="mt-2 text-red-500">{giroError}</p>{/if}
+						<Button rounded class="mt-4" disabled={giroPurchasing || balance < (giroTier.price ?? 0)} onClick={buyGiro}>
+							{#if giroPurchasing}
+								<Preloader colors={{ iconIos: 'text-white', iconMaterial: 'text-white' }} class="h-4 w-4" />
+							{:else}
+								Comprar
+							{/if}
+						</Button>
+					{/if}
+				</Card>
+			</Block>
+		{/if}
+	{:else if searchQuery}
 		{#if searchLoading && searchResults.length === 0}
 			<div class="flex justify-center p-8"><Preloader /></div>
 		{:else}
