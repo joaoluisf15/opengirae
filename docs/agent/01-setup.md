@@ -68,6 +68,17 @@ copy `website/.env.example` to `website/.env` too if you're touching the
 Mini App or admin panel. It needs the *same* `TELEGRAM_TOKEN` duplicated in,
 since `telegramProcedure` validates Mini App init-data against it.
 
+The Mini App (`/app` routes) only renders past its auth gate with real
+Telegram init-data, normally only obtainable through a BotFather-configured
+tunnel (see step 6 below). For loading it directly in a browser during local
+dev, set `website/.env`'s `BYPASS_TELEGRAM_AUTH_DO_NOT_USE_THIS_IN_PROD_PRETTY_PLEASE=1`
+— `telegramProcedure` (`website/src/lib/trpc/middleware/telegramAuth.ts`)
+then falls back to whichever user is linked as telegram id `"1"` instead of
+rejecting requests with missing/invalid init-data. That user must already
+exist (e.g. from a real bot interaction) — the bypass doesn't create one, it
+just skips the init-data check. Never set this in a real deployment; it has
+no other gate besides the env var itself.
+
 ## 4. Run database migrations
 
 ```sh

@@ -10,17 +10,23 @@ export async function requireUser(telegramId: string) {
 	return user;
 }
 
-export const telegramProcedure = t.procedure.use(({ ctx, next }) => {
-	if (!ctx.tmaInitData) throw new TRPCError({ code: 'UNAUTHORIZED' });
+// real Telegram init-data, validated against TELEGRAM_TOKEN - undefined on anything missing/invalid
+function resolveTgUser(initData: string | null): { id: number } | undefined {
+	if (!initData) return undefined;
 	if (!env.TELEGRAM_TOKEN) throw new Error('TELEGRAM_TOKEN is not set');
-
-	let tgUser;
 	try {
-		validate(ctx.tmaInitData, env.TELEGRAM_TOKEN);
-		tgUser = parse(ctx.tmaInitData).user;
+		validate(initData, env.TELEGRAM_TOKEN);
+		return parse(initData).user;
 	} catch {
-		throw new TRPCError({ code: 'UNAUTHORIZED' });
+		return undefined;
 	}
+}
+
+export const telegramProcedure = t.procedure.use(({ ctx, next }) => {
+	// dev-only escape hatch for hitting the Mini App outside Telegram - never set this in prod,
+	// it makes every telegramProcedure call resolve to whichever user is linked as telegram id "1"
+	const bypassed = env.BYPASS_TELEGRAM_AUTH_DO_NOT_USE_THIS_IN_PROD_PRETTY_PLEASE === '1';
+	const tgUser = resolveTgUser(ctx.tmaInitData) ?? (bypassed ? { id: 1 } : undefined);
 	if (!tgUser) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
 	return next({ ctx: { ...ctx, tgUser } });
