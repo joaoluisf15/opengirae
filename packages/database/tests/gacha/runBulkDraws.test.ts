@@ -196,4 +196,30 @@ describe("GachaLogic.runBulkDraws", () => {
     await db.delete(cardDrawHistory).where(eq(cardDrawHistory.userId, userId));
     await db.delete(userCards).where(eq(userCards.userId, userId));
   });
+
+  test("two distinct drawn cards sharing a subcategory: the completion is only claimed/paid once, not once per card", async () => {
+    const sharedSubId = (await fx.subcategory({ categoryId, name: `Test Bulk Shared Sub ${Date.now()}` })).id;
+    const cardAId = (await fx.card({ name: "Test Bulk Shared Card A", subcategoryId: sharedSubId })).id;
+    const cardBId = (await fx.card({ name: "Test Bulk Shared Card B", subcategoryId: sharedSubId })).id;
+
+    try {
+      // enough draws that both of the sub's only 2 cards are virtually certain to be rolled.
+      const { countsByCard } = await GachaLogic.runBulkDraws(userId, Array(30).fill(categoryId), 100, 1, new Set([sharedSubId]));
+      const entryA = countsByCard.find(c => c.cardId === cardAId);
+      const entryB = countsByCard.find(c => c.cardId === cardBId);
+      expect(entryA).toBeDefined();
+      expect(entryB).toBeDefined();
+
+      const rewardRows = await db.select().from(subcategoryCompletionRewards).where(and(eq(subcategoryCompletionRewards.userId, userId), eq(subcategoryCompletionRewards.subcategoryId, sharedSubId)));
+      expect(rewardRows.length).toBe(1);
+
+      const completions = [...(entryA?.completedSubcategories ?? []), ...(entryB?.completedSubcategories ?? [])];
+      expect(completions.length).toBe(1);
+      expect(completions[0]?.subcategoryId).toBe(sharedSubId);
+    } finally {
+      await db.delete(cardDrawHistory).where(eq(cardDrawHistory.userId, userId));
+      await db.delete(userCards).where(eq(userCards.userId, userId));
+      await db.delete(subcategoryCompletionRewards).where(and(eq(subcategoryCompletionRewards.userId, userId), eq(subcategoryCompletionRewards.subcategoryId, sharedSubId)));
+    }
+  });
 });

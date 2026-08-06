@@ -11,14 +11,14 @@ import { UsersDB } from '@girae/database/users'
 import { attemptSubcategoryCompletionReward } from '../../services/cards/collectionCompletion'
 
 async function renderPage(rawArg: string, page: number, viewerTelegramId: string, platform: 'telegram' | 'discord') {
-  const loaded = await loadSubcategoryCollection(rawArg, viewerTelegramId, platform)
+  const loaded = await loadSubcategoryCollection(rawArg, viewerTelegramId, platform, page, 1)
   if (!loaded) return null
-  const { subcategory, category, allCards, cards, userOwnedCards, pct, active, rest } = loaded
+  const { subcategory, category, rows, totalCards, userOwnedCards, pct, filteredTotal, active, rest } = loaded
 
-  const totalPages = Math.max(1, cards.length)
-  const card = cards[page]
+  const totalPages = Math.max(1, filteredTotal)
+  const card = rows[0]
 
-  const advice = filterAdviceText(FILTERS, active, cards.length, 'cards')
+  const advice = filterAdviceText(FILTERS, active, filteredTotal, 'cards')
   const cardLine = card
     ? (() => {
       const badge = cativeiroEmoji(card.ownedCount)
@@ -29,7 +29,7 @@ async function renderPage(rawArg: string, page: number, viewerTelegramId: string
   const pageInfo = card ? `${EMOJI.page} Card \`${page + 1}\` de **${totalPages}**\n` : ''
 
   const content = `${category?.emoji ?? EMOJI.subcategory} \`${subcategory.id}\`. **${escapeMarkdown(subcategory.name)}**
-${EMOJI.dice} **${allCards.length}** cards no total, \`${userOwnedCards}\` na sua coleção.
+${EMOJI.dice} **${totalCards}** cards no total, \`${userOwnedCards}\` na sua coleção.
 ${EMOJI.progress} Coleção ${pct}% completa
 ${advice}
 ${cardLine}

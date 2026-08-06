@@ -49,12 +49,14 @@ services:
     env_file: .env
     environment:
       SCRATCH_DIR: /app/scratch
+      DB_POOL_MAX: "30"
     volumes:
       - scratch:/app/scratch
     depends_on:
       db-push:
         condition: service_completed_successfully
     restart: unless-stopped
+    cpus: 1.5
 
   commandeer-worker:
     build: .
@@ -62,12 +64,14 @@ services:
     env_file: .env
     environment:
       SCRATCH_DIR: /app/scratch
+      DB_POOL_MAX: "30"
     volumes:
       - scratch:/app/scratch
     depends_on:
       db-push:
         condition: service_completed_successfully
     restart: unless-stopped
+    cpus: 1.5
 
   answerer:
     build: .

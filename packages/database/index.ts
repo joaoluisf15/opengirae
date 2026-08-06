@@ -11,7 +11,7 @@ import * as schema_discoteca from "./schemas/discoteca";
 import * as schema_settings from "./schemas/settings";
 import * as schema_storefront from "./schemas/storefront";
 
-export const config = { connectionString: process.env.DATABASE_URL!, max: 15 };
+export const config = { connectionString: process.env.DATABASE_URL!, max: Number(process.env.DB_POOL_MAX) || 15 };
 const pool = new Pool(config);
 
 const schema = { ...schema_cards, ...schema_users, ...schema_audit, ...schema_promo, ...schema_economy, ...schema_discoteca, ...schema_settings, ...schema_storefront };

@@ -301,13 +301,13 @@ export class GachaLogic {
 
     await client.update(users).set({ usedDraws: sql`${users.usedDraws} + ${results.length}` }).where(eq(users.id, userId));
 
-    // once per distinct drawn card, not per copy - claimCompletionsForCardGain is idempotent anyway.
-    const countsByCard: CardCountCrossing[] = [];
-    for (const [cardId, drawnCount] of countByCard.entries()) {
-      const previousCount = previousCountByCard.get(cardId) ?? 0;
-      const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
-      countsByCard.push({ cardId, previousCount, newCount: previousCount + drawnCount, completedSubcategories });
-    }
+    const completionsByCard = await CardsDB.claimCompletionsForCardsGainBatch(client, userId, drawnCardIds, incomeInflationRate);
+    const countsByCard: CardCountCrossing[] = [...countByCard.entries()].map(([cardId, drawnCount]) => ({
+      cardId,
+      previousCount: previousCountByCard.get(cardId) ?? 0,
+      newCount: (previousCountByCard.get(cardId) ?? 0) + drawnCount,
+      completedSubcategories: completionsByCard.get(cardId) ?? [],
+    }))
 
     return { draws: results, countsByCard };
   })

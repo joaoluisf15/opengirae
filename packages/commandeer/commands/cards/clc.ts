@@ -12,25 +12,24 @@ import { attemptSubcategoryCompletionReward } from '../../services/cards/collect
 const PAGE_SIZE = 20
 
 async function renderPage(rawArg: string, page: number, viewerTelegramId: string, platform: 'telegram' | 'discord') {
-  const loaded = await loadSubcategoryCollection(rawArg, viewerTelegramId, platform)
+  const loaded = await loadSubcategoryCollection(rawArg, viewerTelegramId, platform, page, PAGE_SIZE)
   if (!loaded) return null
-  const { subcategory, category, allCards, cards, userOwnedCards, pct, active, rest } = loaded
+  const { subcategory, category, rows: pageRows, totalCards, userOwnedCards, pct, filteredTotal, active, rest } = loaded
 
-  const totalPages = Math.max(1, Math.ceil(cards.length / PAGE_SIZE))
-  const slice = cards.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE))
 
-  const rows = slice.length > 0
-    ? slice.map(c => {
+  const rows = pageRows.length > 0
+    ? pageRows.map(c => {
       const badge = cativeiroEmoji(c.ownedCount)
       const trailing = c.ownedCount > 0 ? `\`${c.ownedCount}x\`` : c.categoryEmoji
       return `${c.rarityEmoji} \`${c.id}\`. **${escapeMarkdown(c.name)}** ${badge}${trailing}`
     }).join('\n')
     : '_Nenhum card para mostrar._'
-  const advice = filterAdviceText(FILTERS, active, cards.length, 'cards')
+  const advice = filterAdviceText(FILTERS, active, filteredTotal, 'cards')
   const pageInfo = totalPages > 1 ? `${EMOJI.page} Página \`${page + 1}\` de **${totalPages}**\n` : ''
 
   const content = `${category?.emoji ?? EMOJI.subcategory} \`${subcategory.id}\`. **${escapeMarkdown(subcategory.name)}**
-${EMOJI.dice} **${allCards.length}** cards no total, \`${userOwnedCards}\` na sua coleção.
+${EMOJI.dice} **${totalCards}** cards no total, \`${userOwnedCards}\` na sua coleção.
 ${EMOJI.progress} Coleção ${pct}% completa
 ${advice}
 ${rows}

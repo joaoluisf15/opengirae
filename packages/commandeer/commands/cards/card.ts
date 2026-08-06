@@ -35,6 +35,7 @@ export async function renderCardSearchResults(query: string, page: number) {
 }
 
 async function showCard(ctx: IncomingCommand, card: CardDetails) {
+  const activeTradePromise = getActiveTradeSide(ctx.message.author.id)
   const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
   const [owned, tags] = await Promise.all([
     user ? CardsDB.getUserCard(user.id, card.id) : null,
@@ -56,7 +57,7 @@ ${EMOJI.owner} \`${user?.id ?? '?'}\`. ${mention(ctx.message.platform, ctx.messa
 
   const buttonRows: ButtonSpec[][] = [[{ text: EMOJI.quickView, quickView: { handler: 'cardinfo', arg: String(card.id) } }]]
 
-  const activeTrade = await getActiveTradeSide(ctx.message.author.id)
+  const activeTrade = await activeTradePromise
   if (activeTrade) {
     const inOffer = !!activeTrade.state.offers[activeTrade.side][card.id]
     if (!inOffer && count > 0) {

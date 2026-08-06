@@ -29,7 +29,8 @@ describe("DiscotecaDB.getArtistWorkCounts / getArtistsPage", () => {
 
   test("getArtistsPage includes the artist with correct counts, even for a user who owns nothing", async () => {
     const otherUserId = (await fx.user({ displayName: "Test ArtistCounts Other User" })).id;
-    const page = await DiscotecaDB.getArtistsPage(otherUserId, 100, 0);
+    const { total } = await DiscotecaDB.getArtistsPage(otherUserId, 1, 0);
+    const page = await DiscotecaDB.getArtistsPage(otherUserId, total, 0);
     const row = page.rows.find(r => r.id === artistId);
     expect(row?.totalWorks).toBe(2);
     expect(row?.ownedWorks).toBe(0);

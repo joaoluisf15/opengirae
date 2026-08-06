@@ -1,8 +1,8 @@
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
-import { applyFilters, parseFilterArg, type FilterDef } from '@girae/common/utilities/pageFilters'
+import { parseFilterArg, type FilterDef } from '@girae/common/utilities/pageFilters'
 
-export type CardRow = Awaited<ReturnType<typeof CardsDB.getCardsInSubcategoryForUser>>[number]
+export type CardRow = Awaited<ReturnType<typeof CardsDB.getCardsInSubcategoryForUserFiltered>>[number]
 
 export const FILTERS: FilterDef<CardRow>[] = [
   { id: '1', emoji: '☀', description: 'que você possui', match: c => c.ownedCount > 0 },
@@ -12,7 +12,9 @@ export const FILTERS: FilterDef<CardRow>[] = [
   { id: '5', emoji: '🥇', description: 'com raridade lendária', match: c => c.rarityName === 'Lendário' },
 ]
 
-export async function loadSubcategoryCollection(rawArg: string, viewerTelegramId: string, platform: 'telegram' | 'discord') {
+const RARITY_NAME_BY_FILTER_ID: Record<string, string> = { '3': 'Comum', '4': 'Raro', '5': 'Lendário' }
+
+export async function loadSubcategoryCollection(rawArg: string, viewerTelegramId: string, platform: 'telegram' | 'discord', page: number, pageSize: number) {
   const { active, rest } = parseFilterArg(rawArg)
   const subcategoryId = parseInt(rest, 10)
 
@@ -23,11 +25,27 @@ export async function loadSubcategoryCollection(rawArg: string, viewerTelegramId
     CardsDB.getCategory(subcategory.categoryId),
     UsersDB.getUserByPlatformAccount(platform, viewerTelegramId),
   ])
-  const allCards = viewer ? await CardsDB.getCardsInSubcategoryForUser(subcategoryId, viewer.id) : []
-  const userOwnedCards = allCards.filter(c => c.ownedCount > 0).length
-  const pct = allCards.length > 0 ? Math.round((userOwnedCards / allCards.length) * 100) : 0
+  if (!viewer) return { subcategory, category, rows: [] as CardRow[], totalCards: 0, userOwnedCards: 0, pct: 0, filteredTotal: 0, active, rest }
 
-  const cards = applyFilters(allCards, FILTERS, active)
+  const ownedActive = active.includes('1')
+  const missingActive = active.includes('2')
+  const rarityFilterIds = ['3', '4', '5'].filter(id => active.includes(id))
+  const impossible = (ownedActive && missingActive) || rarityFilterIds.length > 1
 
-  return { subcategory, category, allCards, cards, userOwnedCards, pct, active, rest }
+  const ownedFilter = ownedActive ? 'owned' as const : missingActive ? 'missing' as const : undefined
+  const rarityName = rarityFilterIds[0] ? RARITY_NAME_BY_FILTER_ID[rarityFilterIds[0]] : undefined
+
+  const [stats, rows] = await Promise.all([
+    CardsDB.getSubcategoryStats(subcategoryId, viewer.id, { ownedFilter, rarityName }),
+    impossible ? Promise.resolve([]) : CardsDB.getCardsInSubcategoryForUserFiltered(subcategoryId, viewer.id, { ownedFilter, rarityName, limit: pageSize, offset: page * pageSize }),
+  ])
+
+  return {
+    subcategory, category, rows,
+    totalCards: stats.total,
+    userOwnedCards: stats.owned,
+    pct: stats.total > 0 ? Math.round((stats.owned / stats.total) * 100) : 0,
+    filteredTotal: impossible ? 0 : stats.filteredTotal,
+    active, rest,
+  }
 }

@@ -589,6 +589,51 @@ export class CardsDB {
     return results;
   }
 
+  static async claimCompletionsForCardsGainBatch(
+    client: DrizzleClient, userId: number, cardIds: number[], incomeInflationRate: number,
+  ): Promise<Map<number, CompletedSubcategory[]>> {
+    const resultsByCard = new Map<number, CompletedSubcategory[]>(cardIds.map(id => [id, []]));
+    if (cardIds.length === 0) return resultsByCard;
+
+    const memberships = await client
+      .select({ cardId: cardSubcategories.cardId, subcategoryId: cardSubcategories.subcategoryId })
+      .from(cardSubcategories)
+      .where(inArray(cardSubcategories.cardId, cardIds));
+    const subcategoryIdsByCard = new Map<number, number[]>();
+    for (const { cardId, subcategoryId } of memberships) {
+      const list = subcategoryIdsByCard.get(cardId) ?? [];
+      list.push(subcategoryId);
+      subcategoryIdsByCard.set(cardId, list);
+    }
+
+    const ownerCardBySubcategory = new Map<number, number>();
+    for (const cardId of cardIds) {
+      for (const subcategoryId of subcategoryIdsByCard.get(cardId) ?? []) {
+        if (!ownerCardBySubcategory.has(subcategoryId)) ownerCardBySubcategory.set(subcategoryId, cardId);
+      }
+    }
+
+    const claimedByCard = new Map<number, { subcategoryId: number; coinsAwarded: number }[]>();
+    for (const [subcategoryId, cardId] of ownerCardBySubcategory) {
+      const claim = await CardsDB.claimSubcategoryCompletionRewardWithClient(client, userId, subcategoryId, incomeInflationRate);
+      if (claim.ok) {
+        const list = claimedByCard.get(cardId) ?? [];
+        list.push({ subcategoryId, coinsAwarded: claim.coinsAwarded });
+        claimedByCard.set(cardId, list);
+      }
+    }
+    if (claimedByCard.size === 0) return resultsByCard;
+
+    const claimedSubcategoryIds = [...claimedByCard.values()].flatMap(list => list.map(c => c.subcategoryId));
+    const names = await client.select({ id: subcategories.id, name: subcategories.name }).from(subcategories).where(inArray(subcategories.id, claimedSubcategoryIds));
+    const nameById = new Map(names.map(n => [n.id, n.name]));
+
+    for (const [cardId, claims] of claimedByCard) {
+      resultsByCard.set(cardId, claims.map(c => ({ subcategoryId: c.subcategoryId, subcategoryName: nameById.get(c.subcategoryId) ?? '?', coinsAwarded: c.coinsAwarded })));
+    }
+    return resultsByCard;
+  }
+
   // TODO: would be cleaner as a raw SQL query
   static async addUserCardWithClient(client: DrizzleClient, userId: number, cardId: number, incomeInflationRate: number) {
     const existing = await client
@@ -914,57 +959,59 @@ export class CardsDB {
       .orderBy(desc(cards.rarityId), cards.id);
   })
 
-  static getCardsInSubcategoryForUserPaginated = maybeTransaction('getCardsInSubcategoryForUserPaginated', async (
+  static getCardsInSubcategoryForUserFiltered = maybeTransaction('getCardsInSubcategoryForUserFiltered', async (
     client, subcategoryId: number, userId: number,
-    opts: { ownedFilter?: 'owned' | 'missing'; limit?: number; offset?: number } = {},
+    opts: { ownedFilter?: 'owned' | 'missing'; rarityName?: string; limit: number; offset: number },
   ) => {
-    const { ownedFilter, limit = 20, offset = 0 } = opts;
-    const baseWhere = eq(cardSubcategories.subcategoryId, subcategoryId);
-    const ownedCondition = sql`COALESCE(${userCards.count}, 0) > 0`;
-    const missingCondition = sql`COALESCE(${userCards.count}, 0) = 0`;
-    const where = ownedFilter === 'owned' ? and(baseWhere, ownedCondition)
-      : ownedFilter === 'missing' ? and(baseWhere, missingCondition)
-      : baseWhere;
+    const conditions = [eq(cardSubcategories.subcategoryId, subcategoryId)];
+    if (opts.ownedFilter === 'owned') conditions.push(sql`COALESCE(${userCards.count}, 0) > 0`);
+    if (opts.ownedFilter === 'missing') conditions.push(sql`COALESCE(${userCards.count}, 0) = 0`);
+    if (opts.rarityName) conditions.push(eq(rarities.name, opts.rarityName));
 
-    const rows = await client
+    return await client
       .select({
         id: cards.id,
         name: cards.name,
         imageUrl: cards.imageUrl,
         rarityName: rarities.name,
         rarityEmoji: rarities.emoji,
+        categoryEmoji: categories.emoji,
         ownedCount: sql<number>`CAST(COALESCE(${userCards.count}, 0) AS INTEGER)`,
-        tradable: sql<boolean>`COALESCE(${userCards.tradable}, false)`,
+      })
+      .from(cardSubcategories)
+      .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .innerJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
+      .innerJoin(categories, eq(categories.id, subcategories.categoryId))
+      .leftJoin(userCards, and(eq(userCards.cardId, cards.id), eq(userCards.userId, userId)))
+      .where(and(...conditions))
+      .orderBy(desc(cards.rarityId), cards.id)
+      .limit(opts.limit)
+      .offset(opts.offset);
+  })
+
+  static getSubcategoryStats = maybeTransaction('getSubcategoryStats', async (
+    client, subcategoryId: number, userId: number,
+    opts: { ownedFilter?: 'owned' | 'missing'; rarityName?: string },
+  ) => {
+    const filterConditions = [];
+    if (opts.ownedFilter === 'owned') filterConditions.push(sql`COALESCE(${userCards.count}, 0) > 0`);
+    if (opts.ownedFilter === 'missing') filterConditions.push(sql`COALESCE(${userCards.count}, 0) = 0`);
+    if (opts.rarityName) filterConditions.push(eq(rarities.name, opts.rarityName));
+    const filterWhere = filterConditions.length > 0 ? and(...filterConditions) : sql`true`;
+
+    const [row] = await client
+      .select({
+        total: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        owned: sql<number>`CAST(COUNT(*) FILTER (WHERE COALESCE(${userCards.count}, 0) > 0) AS INTEGER)`,
+        filteredTotal: sql<number>`CAST(COUNT(*) FILTER (WHERE ${filterWhere}) AS INTEGER)`,
       })
       .from(cardSubcategories)
       .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))
       .innerJoin(rarities, eq(rarities.id, cards.rarityId))
       .leftJoin(userCards, and(eq(userCards.cardId, cards.id), eq(userCards.userId, userId)))
-      .where(where)
-      .orderBy(desc(cards.rarityId), cards.id)
-      .limit(limit)
-      .offset(offset);
-
-    const total = await client
-      .select({ total: sql<number>`CAST(COUNT(*) AS INTEGER)` })
-      .from(cardSubcategories)
-      .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))
-      .leftJoin(userCards, and(eq(userCards.cardId, cards.id), eq(userCards.userId, userId)))
-      .where(where)
-      .then(r => r[0]?.total ?? 0);
-
-    const countWith = async (extra: ReturnType<typeof sql>) => client
-      .select({ total: sql<number>`CAST(COUNT(*) AS INTEGER)` })
-      .from(cardSubcategories)
-      .innerJoin(cards, eq(cards.id, cardSubcategories.cardId))
-      .leftJoin(userCards, and(eq(userCards.cardId, cards.id), eq(userCards.userId, userId)))
-      .where(and(baseWhere, extra))
-      .then(r => r[0]?.total ?? 0);
-
-    const ownedCount = await countWith(ownedCondition);
-    const missingCount = await countWith(missingCondition);
-
-    return { rows, total, ownedCount, missingCount };
+      .where(eq(cardSubcategories.subcategoryId, subcategoryId));
+    return row ?? { total: 0, owned: 0, filteredTotal: 0 };
   })
 
   static getUserCardsCount = maybeTransaction('getUserCardsCount', async (client, userId: number): Promise<number> => {

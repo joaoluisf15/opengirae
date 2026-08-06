@@ -40,6 +40,7 @@
     "dev:commandeer": "PORT=8082 bun --watch packages/commandeer/index.ts",
     "commands:sync": "bun packages/commandeer/scripts/setMyCommands.ts",
     "investigate": "bun packages/tests/scripts/investigate.ts",
+    "traffic": "bun packages/tests/scripts/trafficAnalysis.ts",
     "dev:answerer": "PORT=8083 bun --watch packages/answerer/index.ts"
   }
 }

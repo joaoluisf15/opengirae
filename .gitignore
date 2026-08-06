@@ -42,3 +42,6 @@ neoditto
 ditto
 girae
 .superpowers/
+
+packages/tests/scripts/trafficAnalysis.ts
+traffic-analysis.sqlite
