@@ -48,6 +48,11 @@ export async function executeCommand(cmd: IncomingCommand) {
     avatarUrl: cmd.message.author.avatarUrl,
   });
 
+  if (cmd.name !== 'start' && user?.isBanned) {
+    await reply(cmd, user.banMessage || 'Você está banido de usar a Giraê.');
+    return;
+  }
+
   if (cmd.message.platform === 'telegram' && cmd.name !== 'start' && user) {
     if (!(await hasJoinedSupportChannel(user, cmd.message.author.id))) {
       await reply(cmd, 'Você precisa entrar no nosso canal de suporte @canalgirae para usar a bot! [Entre e tente novamente](https://t.me/canalgirae). 📢');
