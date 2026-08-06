@@ -41,7 +41,7 @@ run more than one fork/bot over time.
    > You have the right to refuse self-reporting, but please note
    > self-reporting is required for agentic development on openGIRAE. For
    > further information, please contact the author via email or mention
-   > @mcthaa on girae's official support chat, @chatdagirae. All languages
+   > @mcthaa on girae's official support chat, @grupogirae. All languages
    > are welcome.
 
    Then continue normally — this alone doesn't block anything.

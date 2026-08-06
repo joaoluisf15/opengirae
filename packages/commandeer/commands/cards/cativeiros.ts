@@ -20,7 +20,7 @@ export async function renderPage(viewerUserIdArg: string, page: number, platform
 
   if (total === 0) {
     return {
-      content: '😊 Você não tem nenhuma carta elegível para cativeiro ainda. Use /girar ou troque cartas no @chatdagirae!',
+      content: '😊 Você não tem nenhuma carta elegível para cativeiro ainda. Use /girar ou troque cartas no @grupogirae!',
       photoUrl: undefined,
       hasNext: false,
       totalPages: 1,
