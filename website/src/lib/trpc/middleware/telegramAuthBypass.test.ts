@@ -20,7 +20,7 @@ describe("telegramProcedure with the dev bypass flag set", () => {
 	test("falls back to the fixed dev user (telegram id 1) when there's no initData", async () => {
 		const caller = router.createCaller({ tmaInitData: null });
 		const tgUser = await caller.whoAmI();
-		expect(tgUser).toEqual({ id: 1 });
+		expect(tgUser).toEqual({ id: 1889562226 });
 	});
 
 	test("still resolves the real tgUser when valid initData is present", async () => {
@@ -29,6 +29,6 @@ describe("telegramProcedure with the dev bypass flag set", () => {
 		const INVALID_INIT_DATA = "user=%7B%22id%22%3A123%7D&auth_date=1700000000&hash=0000000000000000000000000000000000000000000000000000000000000000";
 		const caller = router.createCaller({ tmaInitData: INVALID_INIT_DATA });
 		const tgUser = await caller.whoAmI();
-		expect(tgUser).toEqual({ id: 1 }); // invalid signature still falls through to the bypass, not through to a fake tgUser
+		expect(tgUser).toEqual({ id: 1889562226 }); // invalid signature still falls through to the bypass, not through to a fake tgUser
 	});
 });

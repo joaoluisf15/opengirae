@@ -79,10 +79,11 @@ private (non-`PUBLIC_`) var, read server-side in both places —
 `telegramProcedure` (`website/src/lib/trpc/middleware/telegramAuth.ts`)
 directly, and `app/+layout.server.ts` reads it and passes the boolean down
 as page data for `+layout.svelte` to use, since Svelte components can't read
-private env vars directly. It falls back to whichever user is linked as
-telegram id `"1"`; that user must already exist (e.g. from a real bot
-interaction) — the bypass doesn't create one, it just skips the init-data
-check. Never set this in a real deployment; it has no other gate besides the
+private env vars directly. It falls back to a fixed dev account
+(`DEV_BYPASS_TELEGRAM_ID` in `telegramAuth.ts`) — that account's telegram
+id must already be linked (e.g. from a real bot interaction), the bypass
+doesn't create one, it just skips the init-data check. Never set this in a
+real deployment; it has no other gate besides the
 env var itself. Changing it requires a dev-server restart (`bun run dev`)
 to take effect — SvelteKit reads env vars at server start, not per-request.
 
