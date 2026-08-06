@@ -47,11 +47,11 @@
 		onChanged();
 	}
 
-	function equip() {
+	async function equip() {
 		showEquipPrompt = false;
+		await telegramTrpc.telegram.store.equip.mutate({ itemId: item.id, type: item.type });
 		onChanged();
 		onBack();
-		telegramTrpc.telegram.store.equip.mutate({ itemId: item.id, type: item.type });
 	}
 </script>
 

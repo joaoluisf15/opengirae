@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Page, Navbar, Searchbar, Segmented, SegmentedButton, BlockTitle, Link, Preloader, Chip, Card, Block, Button } from 'konsta/svelte';
+	import { Page, Navbar, Searchbar, Segmented, SegmentedButton, BlockTitle, Link, Preloader, Chip, Card, Block, Button, Dialog, DialogButton } from 'konsta/svelte';
 	import { telegramTrpc } from '$lib/trpc/telegramClient';
 	import StoreItemCard from './StoreItemCard.svelte';
 	import StoreItemDetailView from './StoreItemDetailView.svelte';
@@ -18,6 +18,7 @@
 	let giroLoading = $state(false);
 	let giroPurchasing = $state(false);
 	let giroError = $state<string | null>(null);
+	let giroConfirming = $state(false);
 
 	let searchQuery = $state('');
 	let ownedIds = $state<number[]>([]);
@@ -70,6 +71,7 @@
 	}
 
 	async function buyGiro() {
+		giroConfirming = false;
 		giroPurchasing = true;
 		giroError = null;
 		const result = await telegramTrpc.telegram.store.buyGiroTier.mutate();
@@ -187,9 +189,9 @@
 						</div>
 					{:else}
 						<div class="font-bold text-black dark:text-white">{giroTier.giros} giros</div>
-						<div class="mt-1 text-sm text-black/55 dark:text-white/55">{giroTier.price} moedas</div>
+						<div class="mt-1 text-sm text-black/55 dark:text-white/55">{(giroTier.price ?? 0).toLocaleString('en-US')} moedas</div>
 						{#if giroError}<p class="mt-2 text-red-500">{giroError}</p>{/if}
-						<Button rounded class="mt-4" disabled={giroPurchasing || balance < (giroTier.price ?? 0)} onClick={buyGiro}>
+						<Button rounded class="mt-4" disabled={giroPurchasing || balance < (giroTier.price ?? 0)} onClick={() => (giroConfirming = true)}>
 							{#if giroPurchasing}
 								<Preloader colors={{ iconIos: 'text-white', iconMaterial: 'text-white' }} class="h-4 w-4" />
 							{:else}
@@ -267,3 +269,14 @@
 	{/if}
 </Page>
 {/if}
+
+<Dialog opened={giroConfirming} onBackdropClick={() => (giroConfirming = false)}>
+	{#snippet title()}Confirmar compra{/snippet}
+	{#if giroTier && !giroTier.exhausted}
+		Comprar {giroTier.giros} giros por {(giroTier.price ?? 0).toLocaleString('en-US')} moedas?
+	{/if}
+	{#snippet buttons()}
+		<DialogButton onClick={() => (giroConfirming = false)}>Cancelar</DialogButton>
+		<DialogButton strong onClick={buyGiro}>Confirmar</DialogButton>
+	{/snippet}
+</Dialog>
