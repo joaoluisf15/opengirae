@@ -7,6 +7,7 @@ import { join } from "node:path";
 const { sentMessages } = mockTelegram();
 
 const { isRetriableAsVideo, sendTelegramAnswer } = await import("../platforms/telegram");
+const { TelegramClient } = await import("telegramsjs");
 
 describe("isRetriableAsVideo", () => {
   test("matches Telegram's 'failed to get HTTP URL content' (seen on the first sendAnimation attempt against a just-uploaded file)", () => {
@@ -92,5 +93,78 @@ describe("sendTelegramAnswer sendAudio branches", () => {
     }
     const last = sentMessages[sentMessages.length - 1]!;
     expect(last.method).toBe('sendAudio');
+  });
+
+  test("file://scratch ref, file missing entirely: falls back to sendMessage instead of throwing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'answerer-scratch-missing-'));
+    const prevScratch = process.env.SCRATCH_DIR;
+    process.env.SCRATCH_DIR = dir;
+    try {
+      await sendTelegramAnswer({
+        method: 'sendAudio', chatId: '1', platform: 'telegram', content: 'fallback text',
+        audioUrl: 'file://scratch/missing.m4a', audio: { entryId: 1, performer: 'Artist', title: 'Track' },
+      } as any);
+    } finally {
+      process.env.SCRATCH_DIR = prevScratch;
+      await rm(dir, { recursive: true, force: true });
+    }
+    const last = sentMessages[sentMessages.length - 1]!;
+    expect(last.method).toBe('sendMessage');
+  });
+
+  test("file://scratch ref, file present but empty: falls back to sendMessage instead of sending a 0-byte audio", async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'answerer-scratch-empty-'));
+    const prevScratch = process.env.SCRATCH_DIR;
+    process.env.SCRATCH_DIR = dir;
+    try {
+      await Bun.write(join(dir, 'empty.m4a'), new Uint8Array(0));
+      await sendTelegramAnswer({
+        method: 'sendAudio', chatId: '1', platform: 'telegram', content: 'fallback text',
+        audioUrl: 'file://scratch/empty.m4a', audio: { entryId: 1, performer: 'Artist', title: 'Track' },
+      } as any);
+    } finally {
+      process.env.SCRATCH_DIR = prevScratch;
+      await rm(dir, { recursive: true, force: true });
+    }
+    const last = sentMessages[sentMessages.length - 1]!;
+    expect(last.method).toBe('sendMessage');
+  });
+});
+
+describe("sendTelegramAnswer editMessageText fallback", () => {
+  beforeEach(() => { sentMessages.length = 0; });
+
+  test("target message has no text (only media/caption): retries as editMessageCaption", async () => {
+    const original = TelegramClient.prototype.editMessageText;
+    let attempts = 0;
+    TelegramClient.prototype.editMessageText = async function () {
+      attempts++;
+      throw new Error("Bad Request: there is no text in the message to edit");
+    };
+    try {
+      await sendTelegramAnswer({
+        method: 'editMessageText', chatId: '1', messageId: '42', platform: 'telegram', content: 'new caption text',
+      } as any);
+    } finally {
+      TelegramClient.prototype.editMessageText = original;
+    }
+    expect(attempts).toBe(1);
+    const last = sentMessages[sentMessages.length - 1]!;
+    expect(last.method).toBe('editMessageCaption');
+    expect(last.caption).toBe('new caption text');
+  });
+
+  test("an unrelated editMessageText error is not swallowed into the fallback", async () => {
+    const original = TelegramClient.prototype.editMessageText;
+    TelegramClient.prototype.editMessageText = async function () {
+      throw new Error("Bad Request: chat not found");
+    };
+    try {
+      await expect(sendTelegramAnswer({
+        method: 'editMessageText', chatId: '1', messageId: '42', platform: 'telegram', content: 'new text',
+      } as any)).rejects.toThrow("chat not found");
+    } finally {
+      TelegramClient.prototype.editMessageText = original;
+    }
   });
 });

@@ -75,6 +75,11 @@ const PENDING_TEXT_TTL_SECONDS = 1 * 60 * 60
 
 const RESPONSE_JOB_OPTIONS = { attempts: 3, backoff: { type: 'exponential', delay: 1000 } } as const
 
+export const SLOW_SEND_PRIORITY = 10
+const SLOW_SEND_METHODS = new Set<PendingResponse['method']>(['sendPhoto', 'sendVideo', 'sendAnimation', 'sendAudio', 'editMessageMedia'])
+const responseJobOptions = (method: PendingResponse['method']) =>
+    SLOW_SEND_METHODS.has(method) ? { ...RESPONSE_JOB_OPTIONS, priority: SLOW_SEND_PRIORITY } : RESPONSE_JOB_OPTIONS
+
 const isAnimatedMediaUrl = (url?: string) => !!url && /\.(gif|mp4|webm)(\?|#|$)/i.test(url)
 
 async function getEmbedColor(cmd: IncomingCommand): Promise<string | undefined> {
@@ -156,7 +161,7 @@ export const reply = maybeStep('reply', async (cmd: IncomingCommand, content: Me
             interactionToken,
             embedColor: await getEmbedColor(cmd),
             embedFields,
-        } satisfies PendingResponse, RESPONSE_JOB_OPTIONS)
+        } satisfies PendingResponse, responseJobOptions(method))
         return settleReply(job)
     }
 
@@ -193,7 +198,7 @@ export const reply = maybeStep('reply', async (cmd: IncomingCommand, content: Me
         buttons,
         interactionToken,
         embedColor: await getEmbedColor(cmd),
-    } satisfies PendingResponse, RESPONSE_JOB_OPTIONS)
+    } satisfies PendingResponse, responseJobOptions(method))
     return settleReply(job)
 })
 
@@ -211,7 +216,7 @@ export const deleteMsg = maybeStep('deleteMsg', async (cmd: IncomingCommand, mes
         chatId: cmd.message.chat.id,
         messageId,
         platform: cmd.message.platform,
-    } satisfies PendingResponse, RESPONSE_JOB_OPTIONS)
+    } satisfies PendingResponse, responseJobOptions('deleteMessage'))
 })
 
 export async function awaitMultiPartyChoice<T>(

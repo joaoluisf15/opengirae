@@ -10,7 +10,7 @@ import { escapeMarkdown } from '@girae/common/utilities/markdown'
 const PAGE_SIZE = 10
 
 // telegram caption cap is 1024 chars (vs 4096 for plain text) - names are unbounded, so this stays as a fallback even with the smaller page size
-const MAX_CONTENT_LENGTH_FOR_PHOTO = 700
+const MAX_CONTENT_LENGTH_FOR_PHOTO = 950
 
 type OwnedCardRow = Awaited<ReturnType<typeof CardsDB.getUserOwnedCards>>[number]
 

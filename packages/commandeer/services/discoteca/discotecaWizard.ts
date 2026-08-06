@@ -451,7 +451,7 @@ export async function runEditFlow(ctx: IncomingCommand, entryId: number, type: '
 
   const savedText = `${typeEmoji} ${isAlbum ? 'Álbum' : 'Single'} atualizado: \`${entryId}\`. **${escapeMarkdown(outcome.name)}**`
   if (outcome.messageId) {
-    await reply(ctx, { content: savedText, editMessageId: outcome.messageId })
+    await reply(ctx, { content: savedText, photoUrl: entry.artworkUrl ?? undefined, captionOnly: true, editMessageId: outcome.messageId })
     return
   }
   await reply(ctx, savedText)

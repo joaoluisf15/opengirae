@@ -6,7 +6,7 @@ import { DBOS } from '@girae/common/dbos'
 import { info, error } from '@girae/common/logger'
 import { findQuickView, findPage } from './loaders/commands'
 import type { PendingResponse } from '@girae/common/commands/types'
-import { pageNavSteps, reply } from '@girae/common/dbos/messaging'
+import { pageNavSteps, reply, SLOW_SEND_PRIORITY } from '@girae/common/dbos/messaging'
 import { CardsDB } from '@girae/database/cards'
 import { uploadFromUrl } from '@girae/common/utilities/storage'
 import { buildCtx } from './services/syntheticCtx'
@@ -121,7 +121,7 @@ export const pageWorker = new Worker(PAGE_QUEUE_NAME, async (job) => {
       isVideo: result.isVideo,
       platform,
       buttons: buttons.length ? buttons : undefined,
-    } satisfies PendingResponse),
+    } satisfies PendingResponse, result.photoUrl ? { priority: SLOW_SEND_PRIORITY } : undefined),
     ackPageCallback(platform, callbackQueryId, ''),
   ])
 }, { connection, concurrency: 10, metrics: { maxDataPoints: MetricsTime.ONE_WEEK * 2 } })

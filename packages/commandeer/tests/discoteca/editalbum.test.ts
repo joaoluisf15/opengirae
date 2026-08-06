@@ -7,7 +7,7 @@ import { discotecaEntries, discotecaEntrySubcategories } from "@girae/database/s
 import { auditLogs } from "@girae/database/schemas/audit";
 import { eq } from "drizzle-orm";
 
-mockTelegram();
+const { sentMessages } = mockTelegram();
 
 import EditAlbumCommand from "../../commands/discoteca/editalbum";
 
@@ -51,5 +51,31 @@ describe("/editalbum", () => {
 
     const updated = await db.select().from(discotecaEntries).where(eq(discotecaEntries.id, entry!.id)).then(r => r[0]);
     expect(updated?.name).toBe("Test Renamed Album Name");
+  }, 15000);
+
+  test("an album with artwork: the final 'atualizado' edit keeps the photo (editMessageCaption, not editMessageText)", async () => {
+    const artistId = (await fx.discotecaArtist({ name: "Test Edit Artist With Art" })).id;
+    const rarityId = await anyRarityId();
+    const entry = await DiscotecaDB.createEntry({
+      name: "Test Album With Art", artistId, appleMusicId: `test-editalbum-art-${Date.now()}`, type: 'album', rarityId,
+      artworkUrl: 'https://cdn.example.com/artwork.jpg',
+    });
+    fx.onCleanup(async () => {
+      await db.delete(discotecaEntrySubcategories).where(eq(discotecaEntrySubcategories.entryId, entry!.id));
+      await db.delete(discotecaEntries).where(eq(discotecaEntries.id, entry!.id));
+    });
+
+    sentMessages.length = 0;
+    const workflowID = `test-editalbum-art-${Bun.randomUUIDv7()}`;
+    const runCtx = fakeCtx({ name: 'editalbum', authorId: staffPlatformId, args: [String(entry!.id)], platform: 'telegram', workflowID });
+    const handle = await DBOS.startWorkflow(EditAlbumCommand, { workflowID }).execute(runCtx, { entry: { id: entry!.id } } as any);
+
+    await new Promise(r => setTimeout(r, 500));
+    await DBOS.send(workflowID, { value: { action: 'confirm' }, messageId: 'fake-preview-msg-id' }, 'discoteca:confirm');
+    await handle.getResult();
+
+    const finalEdit = sentMessages[sentMessages.length - 1]!;
+    expect(finalEdit.method).toBe('editMessageCaption');
+    expect(finalEdit.caption).toContain('atualizado');
   }, 15000);
 });

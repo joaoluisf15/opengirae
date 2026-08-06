@@ -145,14 +145,27 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<Sen
       return { messageId: result === true ? response.messageId : result.id }
     }
     case 'editMessageText': {
-      const result = await tg.editMessageText({
-        chatId: response.chatId,
-        messageId: response.messageId!,
-        text: formattedContent!,
-        parseMode: 'HTML',
-        ...buildReplyMarkup(response.buttons)
-      })
-      return { messageId: result === true ? response.messageId : result.id }
+      try {
+        const result = await tg.editMessageText({
+          chatId: response.chatId,
+          messageId: response.messageId!,
+          text: formattedContent!,
+          parseMode: 'HTML',
+          ...buildReplyMarkup(response.buttons)
+        })
+        return { messageId: result === true ? response.messageId : result.id }
+      } catch (e: any) {
+        if (!/no text in the message to edit/i.test(e?.message ?? '')) throw e
+        warn('answerer', `editMessageText rejected message ${response.messageId} as having no text, retrying as editMessageCaption`)
+        const result = await tg.editMessageCaption({
+          chatId: response.chatId,
+          messageId: response.messageId!,
+          caption: formattedContent,
+          parseMode: 'HTML',
+          ...buildReplyMarkup(response.buttons)
+        })
+        return { messageId: result === true ? response.messageId : result.id }
+      }
     }
     case 'sendPhoto': {
       const photoUrl = response.photoUrl!
@@ -288,7 +301,20 @@ export async function sendTelegramAnswer(response: PendingResponse): Promise<Sen
         const ref = parseMediaRef(audioUrl)
         if (ref.kind !== 'file') throw new Error(`unreachable: ${audioUrl} parsed as non-file ref`)
         // telegram-volume zero-copy send is deferred until the local bot-api server exists
-        audioBuffer = Buffer.from(await Bun.file(resolveFilePath(ref)).arrayBuffer())
+        const file = Bun.file(resolveFilePath(ref))
+        if (!(await file.exists()) || file.size === 0) {
+          warn('answerer', `sendAudio: scratch file missing or empty at ${resolveFilePath(ref)} (SCRATCH_DIR not shared with the writer, or cleaned up already?), falling back to sendMessage`)
+          const msg = await tg.sendMessage({
+            chatId: response.chatId,
+            messageThreadId: response.threadId,
+            text: formattedContent ?? '',
+            parseMode: 'HTML',
+            ...buildReplyParameters(response.replyToMessageId, false),
+            ...buildReplyMarkup(response.buttons)
+          })
+          return { messageId: msg.id }
+        }
+        audioBuffer = Buffer.from(await file.arrayBuffer())
       } else {
         const audioRes = await fetch(audioUrl)
         audioBuffer = Buffer.from(await audioRes.arrayBuffer())
