@@ -7,7 +7,6 @@ import type { IncomingCommand } from '@girae/common/commands/types'
 import { generateProfileImage } from '@girae/common/ditto'
 import { refreshAvatar } from '@girae/common/avatarRefresh'
 import { buildProfileData } from '@girae/common/profileData'
-import { getCached, setCached } from '@girae/common/cache/kv'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { tg } from '../../services/botInfo'
 import { togglePrivacyMode } from '../../services/users/privacyToggle'
@@ -48,14 +47,7 @@ export default class ProfileCommand extends Command {
     const avatarUrl = refreshedUser?.avatarUrl || user.avatarUrl || DEFAULT_AVATAR_URL
 
     const profileData = await buildProfileData(ctx.message.platform as 'telegram' | 'discord', targetTelegramId, { avatarURL: avatarUrl })
-
-    const profileImageCacheKey = `profile:image:${user.id}`
-    let image: { url: string } | null = null
-    if (profileData) {
-      const cached = await getCached(profileImageCacheKey)
-      image = cached ? JSON.parse(cached) : await generateProfileImage(profileData)
-      if (!cached && image) await setCached(profileImageCacheKey, JSON.stringify(image), 3600)
-    }
+    const image = profileData ? await generateProfileImage(profileData) : null
 
     const favCardText = favoriteCard
       ? `\n\n${profileData?.favoriteCardEmoji ?? favoriteCard.rarityEmoji} \`${favoriteCard.id}\`. **${escapeMarkdown(favoriteCard.name)}**\n${favoriteCard.categoryEmoji ?? ''} _${escapeMarkdown(favoriteCard.subcategoryName ?? '')}_`
