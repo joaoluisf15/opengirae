@@ -125,11 +125,6 @@ export default class DoarCommand extends Command {
     if (confirmSelection?.messageId) await deleteMsg(ctx, confirmSelection.messageId)
     if (!confirmSelection?.value) return
 
-    // re-check at write time - the recipient's count can change during the confirm-button wait.
-    if (await CardsDB.getUserCardsCount(recipient.id) > MAX_RECIPIENT_CARDS) {
-      await reply(ctx, `Esse usuário já tem mais de ${MAX_RECIPIENT_CARDS} cartas e não pode receber doações no momento. 😅`)
-      return
-    }
 
     const cardCount = offerA.length
     let crossings: { userId: number; cardId: number; previousCount: number; newCount: number }[]
