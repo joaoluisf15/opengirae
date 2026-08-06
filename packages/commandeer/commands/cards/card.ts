@@ -15,6 +15,11 @@ export const FALLBACK_IMAGE = 'https://placehold.co/900x1260/png'
 
 const CARD_SEARCH_PAGE_SIZE = 10
 
+const OBSCURE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+function randomObscuredName(): string {
+  return Array.from({ length: 64 }, () => OBSCURE_CHARS[Math.floor(Math.random() * OBSCURE_CHARS.length)]).join('')
+}
+
 export async function renderCardSearchResults(query: string, page: number) {
   const results = await CardsDB.searchCardsByName(query, 100)
   const totalPages = Math.max(1, Math.ceil(results.length / CARD_SEARCH_PAGE_SIZE))
@@ -38,11 +43,13 @@ async function showCard(ctx: IncomingCommand, card: CardDetails) {
   const count = owned?.count ?? 0
   const badge = cativeiroEmoji(count)
   const rarityOrCustom = resolveDisplayEmoji(owned?.customEmoji, card.rarityEmoji, ctx.message.platform === 'telegram')
+  const obscured = !!user?.obscureMode
+  const displayName = obscured ? randomObscuredName() : card.name
 
   const subcategoryNames = [card.subcategoryName ?? '?', ...tags].map(escapeMarkdown).join(' / ')
   const countSuffix = count > 0 ? ` (\`${count}x\`)` : ''
 
-  const text = `${rarityOrCustom} \`${card.id}\`. **${escapeMarkdown(card.name)}**${badge ? ` ${badge}` : ''}
+  const text = `${rarityOrCustom} \`${card.id}\`. **${escapeMarkdown(displayName)}**${badge ? ` ${badge}` : ''}
 ${card.categoryEmoji ?? EMOJI.category} _${subcategoryNames}_
 
 ${EMOJI.owner} \`${user?.id ?? '?'}\`. ${mention(ctx.message.platform, ctx.message.author.id, ctx.message.author.name)}${countSuffix}`
@@ -62,8 +69,8 @@ ${EMOJI.owner} \`${user?.id ?? '?'}\`. ${mention(ctx.message.platform, ctx.messa
 
   await reply(ctx, {
     content: text,
-    photoUrl: owned?.customMediaUrl ?? card.imageUrl ?? FALLBACK_IMAGE,
-    isVideo: owned?.customMediaType === 'video',
+    photoUrl: obscured ? FALLBACK_IMAGE : (owned?.customMediaUrl ?? card.imageUrl ?? FALLBACK_IMAGE),
+    isVideo: obscured ? false : owned?.customMediaType === 'video',
     buttonRows,
   })
 }

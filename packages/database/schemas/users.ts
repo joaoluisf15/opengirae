@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   username: text(),
   isBanned: boolean().notNull().default(false),
   banMessage: text(),
+  obscureMode: boolean().notNull().default(false),
   isAdmin: boolean().notNull().default(false),
   specialUser: boolean().notNull().default(false),
 

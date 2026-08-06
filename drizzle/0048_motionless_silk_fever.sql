@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "obscureMode" boolean DEFAULT false NOT NULL;
