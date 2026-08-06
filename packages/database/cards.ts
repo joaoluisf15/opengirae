@@ -1250,6 +1250,19 @@ export class CardsDB {
     await client.delete(wishlist).where(and(eq(wishlist.userId, userId), eq(wishlist.cardId, cardId)));
   })
 
+  static removeManyFromWishlist = maybeTransaction('removeManyFromWishlist', async (client, userId: number, cardIds: number[]) => {
+    if (cardIds.length === 0) return [];
+    const removed = await client
+      .delete(wishlist)
+      .where(and(eq(wishlist.userId, userId), inArray(wishlist.cardId, cardIds)))
+      .returning({ cardId: wishlist.cardId });
+    return removed.map(r => r.cardId);
+  })
+
+  static clearWishlist = maybeTransaction('clearWishlist', async (client, userId: number) => {
+    await client.delete(wishlist).where(eq(wishlist.userId, userId));
+  })
+
   static isOnWishlist = maybeTransaction('isOnWishlist', async (client, userId: number, cardId: number) => {
     return !!(await client
       .select()

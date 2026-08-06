@@ -78,4 +78,21 @@ describe("CardsDB wishlist methods", () => {
     await CardsDB.removeFromWishlist(userId, cardAId);
     await CardsDB.removeFromWishlist(userId, cardBId);
   });
+
+  test("removeManyFromWishlist removes only the requested cards and reports which were actually on the list", async () => {
+    await CardsDB.addToWishlist(userId, cardAId);
+
+    const removed = await CardsDB.removeManyFromWishlist(userId, [cardAId, cardBId]);
+    expect(removed).toEqual([cardAId]);
+    expect(await CardsDB.isOnWishlist(userId, cardAId)).toBe(false);
+  });
+
+  test("clearWishlist removes everything for that user", async () => {
+    await CardsDB.addToWishlist(userId, cardAId);
+    await CardsDB.addToWishlist(userId, cardBId);
+
+    await CardsDB.clearWishlist(userId);
+    const { total } = await CardsDB.getWishlist(userId, {});
+    expect(total).toBe(0);
+  });
 });

@@ -87,6 +87,31 @@ describe("/doar (and its alias /micar) donate cards as a one-sided trade", () =>
     expect(await ownedCount(recipientId, cardCId)).toBe(0);
   });
 
+  test("a repeated ID donates that many copies", async () => {
+    await fx.ownCard(donorId, cardAId, 2);
+    const recipientCountBefore = await ownedCount(recipientId, cardAId);
+    const { workflowID, handle } = await runToConfirm([String(cardAId), String(cardAId)]);
+    await DBOS.send(workflowID, { value: true }, 'doar:confirm');
+    await handle.getResult();
+
+    expect(await ownedCount(donorId, cardAId)).toBe(0);
+    expect(await ownedCount(recipientId, cardAId)).toBe(recipientCountBefore + 2);
+  });
+
+  test("a repeated ID exceeding owned quantity is skipped, other cards still go through", async () => {
+    await fx.ownCard(donorId, cardBId, 1);
+    await fx.ownCard(donorId, cardCId, 1);
+    const donorBCountBefore = await ownedCount(donorId, cardBId);
+    const recipientCCountBefore = await ownedCount(recipientId, cardCId);
+    const { workflowID, handle } = await runToConfirm([String(cardBId), String(cardBId), String(cardCId)]);
+    await DBOS.send(workflowID, { value: true }, 'doar:confirm');
+    await handle.getResult();
+
+    expect(await ownedCount(donorId, cardBId)).toBe(donorBCountBefore);
+    expect(await ownedCount(donorId, cardCId)).toBe(0);
+    expect(await ownedCount(recipientId, cardCId)).toBe(recipientCCountBefore + 1);
+  });
+
   test("* donates the donor's entire collection, full counts included", async () => {
     const bulkDonorPlatformId = "test-doar-bulk-donor";
     const bulkDonorId = (await fx.user({ displayName: "Test Doar Bulk Donor", platform: 'telegram', platformId: bulkDonorPlatformId })).id;

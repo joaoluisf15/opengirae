@@ -74,7 +74,7 @@ export default class DoarCommand extends Command {
       successList = ''
     } else {
       const tokens = args.cardsRaw.split(/\s+/).filter(Boolean)
-      let cardIds: number[]
+      const requestedQty = new Map<number, number>()
 
       if (tokens.length === 1 || !tokens.every(t => /^\d+$/.test(t))) {
         const outcome = await resolveCardByIdOrName(args.cardsRaw)
@@ -82,34 +82,46 @@ export default class DoarCommand extends Command {
           await reply(ctx, outcome.message ?? `Uso: \`${this.info.usage}\``)
           return
         }
-        cardIds = [(outcome.value as { id: number }).id]
+        requestedQty.set((outcome.value as { id: number }).id, 1)
       } else {
         if (tokens.length > MAX_CARDS) {
           await reply(ctx, `Você só pode doar até ${MAX_CARDS} cartas de uma vez.`)
           return
         }
-        cardIds = [...new Set(tokens.map(t => parseInt(t, 10)))]
+        for (const t of tokens) {
+          const id = parseInt(t, 10)
+          requestedQty.set(id, (requestedQty.get(id) ?? 0) + 1)
+        }
       }
 
-      const owned = await CardsDB.getOwnedCardQuantities(donor.id, cardIds)
-      const ownedIds = new Set(owned.map(o => o.cardId))
-      const validIds = cardIds.filter(id => ownedIds.has(id))
-      const skippedIds = cardIds.filter(id => !ownedIds.has(id))
+      const owned = await CardsDB.getOwnedCardQuantities(donor.id, [...requestedQty.keys()])
+      const ownedCountById = new Map(owned.map(o => [o.cardId, o.count]))
 
-      if (validIds.length === 0) {
-        await reply(ctx, 'Você não tem nenhuma dessas cartas.')
+      const finalQty = new Map<number, number>()
+      const skippedIds: number[] = []
+      for (const [id, qty] of requestedQty) {
+        const have = ownedCountById.get(id) ?? 0
+        if (have >= qty) finalQty.set(id, qty)
+        else skippedIds.push(id)
+      }
+
+      if (finalQty.size === 0) {
+        await reply(ctx, 'Você não tem essas cartas em quantidade suficiente.')
         return
       }
 
+      const validIds = [...finalQty.keys()]
       const cardDetails = await CardsDB.getCardsByIds(validIds)
       const cardsById = new Map(cardDetails.map(c => [c.id, c]))
       const list = validIds.map(id => {
         const c = cardsById.get(id)
-        return c ? `${c.rarityEmoji} \`${c.id}\`. **${escapeMarkdown(c.name)}**` : `\`${id}\``
+        const qty = finalQty.get(id)!
+        const qtySuffix = qty > 1 ? ` (\`${qty}x\`)` : ''
+        return c ? `${c.rarityEmoji} \`${c.id}\`. **${escapeMarkdown(c.name)}**${qtySuffix}` : `\`${id}\`${qtySuffix}`
       }).join('\n')
-      const skippedNote = skippedIds.length > 0 ? `\n\n⚠️ Ignoradas (você não tem): ${skippedIds.map(id => `\`${id}\``).join(', ')}` : ''
+      const skippedNote = skippedIds.length > 0 ? `\n\n⚠️ Ignoradas (você não tem em quantidade suficiente): ${skippedIds.map(id => `\`${id}\``).join(', ')}` : ''
 
-      offerA = validIds.map(id => ({ cardId: id, count: 1 }))
+      offerA = validIds.map(id => ({ cardId: id, count: finalQty.get(id)! }))
       confirmContent = `Doar **${validIds.length}** carta(s) para **${escapeMarkdown(recipient.displayName)}**?\n\n${list}${skippedNote}`
       successList = `\n\n${list}`
     }
@@ -126,7 +138,7 @@ export default class DoarCommand extends Command {
     if (!confirmSelection?.value) return
 
 
-    const cardCount = offerA.length
+    const cardCount = offerA.reduce((sum, o) => sum + o.count, 0)
     let crossings: { userId: number; cardId: number; previousCount: number; newCount: number }[]
     try {
       const incomeInflationRate = await EconomyDB.getIncomeInflationRate()
