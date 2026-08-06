@@ -27,6 +27,11 @@ await DBOS.applySchedules([
         scheduleName: 'hourly-draw-decay',
         workflowFn: CronJobs.runHourlyDrawDecay,
         schedule: '0 * * * *',
+    },
+    {
+        scheduleName: 'storefront-refresh',
+        workflowFn: CronJobs.runStorefrontRefresh,
+        schedule: '0 */6 * * *',
     }
 ])
 

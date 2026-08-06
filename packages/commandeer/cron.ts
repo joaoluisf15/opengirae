@@ -1,6 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk'
 import { UsersDB } from '@girae/database/users'
 import { EconomyDB } from '@girae/database/economy'
+import { StorefrontDB } from '@girae/database/storefront'
 import { info } from '@girae/common/logger'
 
 export class CronJobs {
@@ -15,5 +16,11 @@ export class CronJobs {
     info('cron', `Running hourly draw decay for ${schedTime.toISOString()}`)
     await UsersDB.decrementUsedDraws(2)
     await EconomyDB.syncAllocations()
+  }
+
+  @DBOS.workflow()
+  static async runStorefrontRefresh(schedTime: Date) {
+    info('cron', `Running storefront refresh for ${schedTime.toISOString()}`)
+    await StorefrontDB.refresh()
   }
 }

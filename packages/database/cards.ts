@@ -95,6 +95,28 @@ export class CardsDB {
       .then(a => a?.[0]);
   })
 
+  static getCardsWithDetailsByIds = maybeTransaction('getCardsWithDetailsByIds', async (client, ids: number[]) => {
+    if (ids.length === 0) return [];
+    return await client
+      .select({
+        id: cards.id,
+        name: cards.name,
+        imageUrl: cards.imageUrl,
+        rarityName: rarities.name,
+        rarityEmoji: rarities.emoji,
+        categoryEmoji: categories.emoji,
+        subcategoryName: subcategories.name,
+        subcategoryEmoji: sql<string | null>`COALESCE(${subcategories.emoji}, ${categories.emoji})`,
+      })
+      .from(cards)
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .leftJoin(cardSubcategories, and(eq(cardSubcategories.cardId, cards.id), eq(cardSubcategories.isMain, true)))
+      .leftJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
+      .leftJoin(categories, eq(categories.id, subcategories.categoryId))
+      .where(inArray(cards.id, ids))
+      .orderBy(cards.id); // stable order - Postgres gives none by default, so callers displaying a grid would otherwise see rows reshuffle between identical requests
+  })
+
   static getCardsByIds = maybeTransaction('getCardsByIds', async (client, ids: number[]) => {
     if (ids.length === 0) return [];
     return await client
@@ -568,7 +590,7 @@ export class CardsDB {
   }
 
   // TODO: would be cleaner as a raw SQL query
-  static addUserCard = maybeTransaction('addUserCard', async (client, userId: number, cardId: number, incomeInflationRate: number) => {
+  static async addUserCardWithClient(client: DrizzleClient, userId: number, cardId: number, incomeInflationRate: number) {
     const existing = await client
       .select()
       .from(userCards)
@@ -602,6 +624,10 @@ export class CardsDB {
     if (!inserted) return undefined;
     const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
     return { ...inserted, previousCount: 0, completedSubcategories };
+  }
+
+  static addUserCard = maybeTransaction('addUserCard', async (client, userId: number, cardId: number, incomeInflationRate: number) => {
+    return await CardsDB.addUserCardWithClient(client, userId, cardId, incomeInflationRate);
   })
 
   static executeTrade = maybeTransaction('executeTrade', async (

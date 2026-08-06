@@ -3,6 +3,7 @@
 	import { telegramTrpc } from '$lib/trpc/telegramClient';
 	import StoreItemCard from './StoreItemCard.svelte';
 	import StoreItemDetailView from './StoreItemDetailView.svelte';
+	import StorefrontCardDetailView from './StorefrontCardDetailView.svelte';
 	import InfiniteScrollSentinel from './InfiniteScrollSentinel.svelte';
 
 	type Item = { id: number; title: string; description: string; price: number; itemURL: string; type: 'background' | 'sticker' };
@@ -19,6 +20,12 @@
 	let giroPurchasing = $state(false);
 	let giroError = $state<string | null>(null);
 	let giroConfirming = $state(false);
+
+	type StorefrontCard = { id: number; name: string; imageUrl: string | null; rarityName: string; rarityEmoji: string; subcategoryName: string | null; subcategoryEmoji: string | null; price: number; alreadyBought: boolean };
+	let storefrontCards = $state<StorefrontCard[]>([]);
+	let storefrontResetsAt = $state<string | null>(null);
+	let storefrontLoading = $state(false);
+	let selectedStorefrontCard = $state<StorefrontCard | undefined>(undefined);
 
 	let searchQuery = $state('');
 	let ownedIds = $state<number[]>([]);
@@ -88,6 +95,21 @@
 		balance = await telegramTrpc.telegram.store.balance.query();
 	}
 
+	async function loadStorefront() {
+		storefrontLoading = true;
+		const result = await telegramTrpc.telegram.storefront.list.query();
+		storefrontCards = result.cards;
+		storefrontResetsAt = result.resetsAt;
+		storefrontLoading = false;
+	}
+
+	function formatResetIn(resetsAt: string): string {
+		const diffMs = new Date(resetsAt).getTime() - Date.now();
+		const hours = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60)));
+		const minutes = Math.max(0, Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60)));
+		return `${hours}h ${minutes}min`;
+	}
+
 	function queryForSection(section: Section) {
 		return section === 'popular' ? telegramTrpc.telegram.store.popular
 			: section === 'recent' ? telegramTrpc.telegram.store.recent
@@ -139,6 +161,10 @@
 
 	$effect(() => {
 		if (mode === 'cards' && !giroTier) loadGiroTier();
+	});
+
+	$effect(() => {
+		if (mode === 'cards' && storefrontCards.length === 0 && !storefrontLoading) loadStorefront();
 	});
 
 	function isOwned(id: number) {
@@ -201,6 +227,36 @@
 					{/if}
 				</Card>
 			</Block>
+		{/if}
+
+		<BlockTitle>
+			Lendárias
+			{#if storefrontResetsAt}
+				<span class="text-sm font-normal text-black/55 dark:text-white/55">
+					Opções resetam em {formatResetIn(storefrontResetsAt)}
+				</span>
+			{/if}
+		</BlockTitle>
+		{#if storefrontLoading && storefrontCards.length === 0}
+			<div class="flex justify-center p-8"><Preloader /></div>
+		{:else}
+			<div class="grid grid-cols-3 gap-2 p-4">
+				{#each storefrontCards as card (card.id)}
+					<button
+						type="button"
+						onclick={() => (selectedStorefrontCard = card)}
+						class="ios:rounded-2xl material:rounded-xl relative aspect-[3/4] overflow-hidden border-2 border-transparent bg-black/5 dark:bg-white/5"
+						class:opacity-40={card.alreadyBought}
+					>
+						{#if card.imageUrl}
+							<img src={card.imageUrl} alt={card.name} loading="lazy" class="absolute inset-0 h-full w-full object-cover" />
+						{/if}
+						{#if card.alreadyBought}
+							<div class="absolute inset-x-0 bottom-0 bg-black/60 p-1 text-center text-xs text-white">Comprado</div>
+						{/if}
+					</button>
+				{/each}
+			</div>
 		{/if}
 	{:else if searchQuery}
 		{#if searchLoading && searchResults.length === 0}
@@ -269,6 +325,13 @@
 	{/if}
 </Page>
 {/if}
+
+<StorefrontCardDetailView
+	card={selectedStorefrontCard}
+	{balance}
+	onBack={() => (selectedStorefrontCard = undefined)}
+	onChanged={loadStorefront}
+/>
 
 <Dialog opened={giroConfirming} onBackdropClick={() => (giroConfirming = false)}>
 	{#snippet title()}Confirmar compra{/snippet}
