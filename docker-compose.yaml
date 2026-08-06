@@ -62,7 +62,6 @@ services:
     env_file: .env
     environment:
       SCRATCH_DIR: /app/scratch
-      PORT: "8090"
     volumes:
       - scratch:/app/scratch
     depends_on:
