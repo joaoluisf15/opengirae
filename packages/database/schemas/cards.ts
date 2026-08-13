@@ -50,6 +50,10 @@ export const subcategories = pgTable(
     emoji: text(),
 
     rarityModifier: integer().notNull().default(100),
+
+    createdAt: timestamp().notNull().defaultNow(),
+    // set once the new-content cron has posted about this subcategory - see CardsDB.claimUnannouncedSubcategories
+    announcedAt: timestamp(),
   },
   (table) => [
     // every /girar draw filters subcategories by categoryId
@@ -70,6 +74,10 @@ export const cards = pgTable(
     updatedAt: timestamp().notNull().defaultNow(),
 
     rarityModifier: integer().notNull().default(100),
+
+    createdAt: timestamp().notNull().defaultNow(),
+    // set once the new-content cron has posted about this card - see CardsDB.claimUnannouncedCards
+    announcedAt: timestamp(),
   },
   (table) => [
     // ilike(name, '%query%') needs pg_trgm's operator class, a plain btree can't do it

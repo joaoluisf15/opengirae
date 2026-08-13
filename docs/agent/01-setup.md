@@ -55,6 +55,7 @@ cp .env.example .env
 | `MISTRAL_API_KEY` / `MISTRAL_MODEL` | `/addcard`'s AI inference | optional locally — inference just fails gracefully without it |
 | `DITTO_URL` / `DITTO_API_KEY` | profile/trade/wishlist card images | optional — every image-generating call degrades to `null`/a placeholder without it, nothing crashes |
 | `S3_*` | avatar/card image uploads | optional locally for the same reason — uploads just fail, don't block command logic |
+| `ANNOUNCEMENT_CHAT_ID` / `ANNOUNCEMENT_THREAD_ID` | new-content announcement cron | optional — unset means `CronJobs.announceNewContent` no-ops, same degrade-gracefully shape as Ditto/S3/Mistral |
 
 **Nothing above is required to get commands responding** except `DATABASE_URL`,
 `DBOS_SYSTEM_DATABASE_URL`, `REDIS_URL`, and whichever platform token

@@ -17,7 +17,7 @@ import {
   hipotecaHoldings,
 } from "./schemas/cards";
 import { users } from "./schemas/users";
-import { eq, and, sql, ilike, desc, gte, gt, inArray } from "drizzle-orm";
+import { eq, and, sql, ilike, desc, gte, gt, inArray, isNull, lt } from "drizzle-orm";
 import { CARD_DISCARD_REWARDS, SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER } from "./constants";
 import { EconomyDB } from "./economy";
 import type { DrizzleClient } from "./decorators";
@@ -936,6 +936,101 @@ export class CardsDB {
       .where(and(eq(subcategories.categoryId, categoryId), eq(subcategories.isSecondary, false)))
       .groupBy(subcategories.id, subcategories.name)
       .orderBy(subcategories.id);
+  })
+
+  // Atomically claims (marks announcedAt) every subcategory older than cutoff that hasn't been posted about yet,
+  // plus every existing main-card of those subcategories (regardless of the card's own age) - so
+  // claimUnannouncedCards never re-surfaces a card that was already shown in its collection's announcement.
+  // onlyIds narrows the claim to a specific set of subcategories - unused in production (the cron wants every
+  // eligible row), but lets a test scope this otherwise table-wide UPDATE to just its own fixtures, the same
+  // concern 04-dbos.md raises about testing resetMidnightStats-shaped jobs against a shared dev DB.
+  static claimUnannouncedSubcategories = maybeTransaction('claimUnannouncedSubcategories', async (client, cutoff: Date, onlyIds?: number[]) => {
+    const claimConditions = [isNull(subcategories.announcedAt), lt(subcategories.createdAt, cutoff)];
+    if (onlyIds) claimConditions.push(inArray(subcategories.id, onlyIds));
+
+    const claimedSubcategories = await client
+      .update(subcategories)
+      .set({ announcedAt: sql`now()` })
+      .where(and(...claimConditions))
+      .returning();
+    if (claimedSubcategories.length === 0) return [];
+
+    const subcategoryIds = claimedSubcategories.map(s => s.id);
+    const categoryIds = [...new Set(claimedSubcategories.map(s => s.categoryId))];
+    const categoryEmojiById = new Map(
+      (await client.select({ id: categories.id, emoji: categories.emoji }).from(categories).where(inArray(categories.id, categoryIds)))
+        .map(c => [c.id, c.emoji] as const)
+    );
+
+    const mainCardLinks = await client
+      .select({ cardId: cardSubcategories.cardId, subcategoryId: cardSubcategories.subcategoryId })
+      .from(cardSubcategories)
+      .where(and(inArray(cardSubcategories.subcategoryId, subcategoryIds), eq(cardSubcategories.isMain, true)));
+    const subcategoryIdByCardId = new Map(mainCardLinks.map(l => [l.cardId, l.subcategoryId] as const));
+
+    const markedCards = mainCardLinks.length === 0 ? [] : await client
+      .update(cards)
+      .set({ announcedAt: sql`now()` })
+      .where(and(isNull(cards.announcedAt), inArray(cards.id, mainCardLinks.map(l => l.cardId))))
+      .returning({ id: cards.id, name: cards.name, rarityId: cards.rarityId });
+
+    const rarityIds = [...new Set(markedCards.map(c => c.rarityId))];
+    const rarityEmojiById = new Map(
+      rarityIds.length === 0 ? [] :
+        (await client.select({ id: rarities.id, emoji: rarities.emoji }).from(rarities).where(inArray(rarities.id, rarityIds)))
+          .map(r => [r.id, r.emoji] as const)
+    );
+
+    const cardsBySubcategory = new Map<number, { id: number; name: string; rarityEmoji: string }[]>();
+    for (const c of markedCards) {
+      const subcategoryId = subcategoryIdByCardId.get(c.id);
+      if (subcategoryId === undefined) continue;
+      const list = cardsBySubcategory.get(subcategoryId) ?? [];
+      list.push({ id: c.id, name: c.name, rarityEmoji: rarityEmojiById.get(c.rarityId) ?? '' });
+      cardsBySubcategory.set(subcategoryId, list);
+    }
+
+    return claimedSubcategories.map(s => ({
+      id: s.id,
+      name: s.name,
+      categoryEmoji: categoryEmojiById.get(s.categoryId) ?? '🏷️',
+      imageUrl: s.imageUrl,
+      createdAt: s.createdAt,
+      cards: cardsBySubcategory.get(s.id) ?? [],
+    }));
+  })
+
+  // Atomically claims every card older than cutoff that hasn't been posted about yet. Cards belonging to a
+  // subcategory just claimed by claimUnannouncedSubcategories are already marked by that call, so they never
+  // show up here too - no exclude-list needed. onlyIds: see claimUnannouncedSubcategories's note.
+  static claimUnannouncedCards = maybeTransaction('claimUnannouncedCards', async (client, cutoff: Date, onlyIds?: number[]) => {
+    const claimConditions = [isNull(cards.announcedAt), lt(cards.createdAt, cutoff)];
+    if (onlyIds) claimConditions.push(inArray(cards.id, onlyIds));
+
+    const claimed = await client
+      .update(cards)
+      .set({ announcedAt: sql`now()` })
+      .where(and(...claimConditions))
+      .returning({ id: cards.id });
+    if (claimed.length === 0) return [];
+
+    return await client
+      .select({
+        id: cards.id,
+        name: cards.name,
+        rarityEmoji: rarities.emoji,
+        subcategoryId: subcategories.id,
+        subcategoryName: subcategories.name,
+        subcategoryEmoji: sql<string>`COALESCE(${subcategories.emoji}, ${categories.emoji})`,
+        subcategoryImageUrl: subcategories.imageUrl,
+      })
+      .from(cards)
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .innerJoin(cardSubcategories, and(eq(cardSubcategories.cardId, cards.id), eq(cardSubcategories.isMain, true)))
+      .innerJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
+      .innerJoin(categories, eq(categories.id, subcategories.categoryId))
+      .where(inArray(cards.id, claimed.map(c => c.id)))
+      .orderBy(subcategories.id, desc(cards.rarityId), cards.id);
   })
 
   static getCardsInSubcategoryForUser = maybeTransaction('getCardsInSubcategoryForUser', async (client, subcategoryId: number, userId: number) => {
