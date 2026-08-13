@@ -86,9 +86,13 @@ with multiple replicas).
   a second midnight schedule. Same reasoning for
   `EconomyDB.syncAllocations()` — called from inside the existing
   `runHourlyDrawDecay`, not a new `scheduleName`, since both already run
-  hourly. Only reach for a genuinely new `scheduleName`/cron entry when the
-  timing actually differs (a different time of day, a different frequency)
-  from what already exists.
+  hourly. `CronJobs.announceNewContent` (subcategories/cards older than 1h
+  with `announcedAt IS NULL` — see `CardsDB.claimUnannouncedSubcategories`/
+  `claimUnannouncedCards`, `packages/database/cards.ts`) is called from
+  inside `runStorefrontRefresh` for the same reason: both already run every
+  6h (`0 */6 * * *`). Only reach for a genuinely new `scheduleName`/cron
+  entry when the timing actually differs (a different time of day, a
+  different frequency) from what already exists.
 - **`resetMidnightStats()` (and any job shaped like it) updates every row in
   `users` with no per-user `WHERE` scoping** — correct for a real scheduled
   run, but means it should never be called from a test against a shared dev

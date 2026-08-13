@@ -11,6 +11,8 @@ export const EMOJI = {
   browse: '👀',
   progress: '📊',
   goal: '⭐',
+  newContent: '➕',
+  date: '📅',
 }
 
 const CATIVEIRO_TIERS: Array<[min: number, emoji: string]> = [
