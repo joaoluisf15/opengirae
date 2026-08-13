@@ -344,6 +344,13 @@
       "when": 1786040342740,
       "tag": "0048_motionless_silk_fever",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1786589679228,
+      "tag": "0049_solid_susan_delgado",
+      "breakpoints": true
     }
   ]
 }

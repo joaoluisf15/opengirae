@@ -86,9 +86,7 @@ export class GachaLogic {
   static selectCard(pool: CardForDraw[], luckModifier: number): CardForDraw | undefined {
     if (pool.length === 0) return undefined;
 
-    // a tier's *total* pull-weight must not scale with how many cards happen to be catalogued at
-    // that tier - dividing by tier size keeps a rarity's total probability mass fixed regardless
-    // of catalog size, instead of every extra common diluting the rest of the pool.
+    // dividing by tier size keeps a rarity's total pull-weight fixed regardless of how many cards are catalogued at it.
     const countByRank = new Map<number, number>();
     for (const c of pool) countByRank.set(c.rank, (countByRank.get(c.rank) ?? 0) + 1);
 
@@ -129,7 +127,8 @@ export class GachaLogic {
         rarityModifier: subcategories.rarityModifier
       })
       .from(subcategories)
-      .where(eq(subcategories.categoryId, categoryId));
+      // secondary subcategories are tags for card lookup/filtering, not real drawable collections - see CardsDB.getSubcategoriesWithCardCounts
+      .where(and(eq(subcategories.categoryId, categoryId), eq(subcategories.isSecondary, false)));
   })
 
   static getCardsForDraw = maybeTransaction('getCardsForDraw', async (client, subcategoryId: number): Promise<CardForDraw[]> => {
@@ -200,7 +199,8 @@ export class GachaLogic {
     const subcategoryRows = await client
       .select({ id: subcategories.id, name: subcategories.name, rarityModifier: subcategories.rarityModifier, categoryId: subcategories.categoryId })
       .from(subcategories)
-      .where(inArray(subcategories.categoryId, distinctCategoryIds));
+      // secondary subcategories are tags for card lookup/filtering, not real drawable collections - see getSubcategoriesForDraw
+      .where(and(inArray(subcategories.categoryId, distinctCategoryIds), eq(subcategories.isSecondary, false)));
     const subcategoriesByCategory = new Map<number, SubcategoryForDraw[]>();
     for (const { categoryId, ...sub } of subcategoryRows) {
       const list = subcategoriesByCategory.get(categoryId) ?? [];
