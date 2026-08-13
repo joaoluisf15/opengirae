@@ -222,4 +222,16 @@ describe("GachaLogic.runBulkDraws", () => {
       await db.delete(subcategoryCompletionRewards).where(and(eq(subcategoryCompletionRewards.userId, userId), eq(subcategoryCompletionRewards.subcategoryId, sharedSubId)));
     }
   });
+
+  test("a secondary subcategory is never rolled, even when it's the only subcategory with cards in the category", async () => {
+    const soloCategoryId = (await fx.category({ name: `Test Bulk Secondary-Only Category ${Date.now()}` })).id;
+    const secondarySubId = (await fx.subcategory({ categoryId: soloCategoryId, name: "Test Bulk Secondary Sub" })).id;
+    await CardsDB.updateSubcategory(secondarySubId, { isSecondary: true });
+    await fx.card({ name: "Test Bulk Secondary Card", subcategoryId: secondarySubId });
+
+    // the category has exactly one subcategory and it's secondary, so the filtered pool is empty -
+    // runBulkDraws must skip the category entirely (same as "no subcategories at all"), never draw from it.
+    const { draws: results } = await GachaLogic.runBulkDraws(userId, Array(20).fill(soloCategoryId), 100, 1);
+    expect(results).toEqual([]);
+  });
 });
