@@ -10,9 +10,7 @@ describe("CardsDB.claimUnannouncedCards", () => {
   beforeAll(async () => {
     categoryId = (await fx.category({ name: `Test Claim Cards Category ${Date.now()}` })).id;
     subcategoryId = (await fx.subcategory({ categoryId, name: "Test Claim Cards Subcategory" })).id;
-    // mark the subcategory itself as already-announced (scoped to just this fixture) before any card exists in
-    // it, so the cards created below are exercised through claimUnannouncedCards's own path, not swept up by
-    // claimUnannouncedSubcategories's auto-claim of a fresh collection's cards.
+    // mark the subcategory as already-announced first, so cards added below hit claimUnannouncedCards's own path, not the subcategory-claim auto-claim.
     await CardsDB.claimUnannouncedSubcategories(new Date(), [subcategoryId]);
   });
 

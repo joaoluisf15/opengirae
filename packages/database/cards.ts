@@ -938,12 +938,7 @@ export class CardsDB {
       .orderBy(subcategories.id);
   })
 
-  // Atomically claims (marks announcedAt) every subcategory older than cutoff that hasn't been posted about yet,
-  // plus every existing main-card of those subcategories (regardless of the card's own age) - so
-  // claimUnannouncedCards never re-surfaces a card that was already shown in its collection's announcement.
-  // onlyIds narrows the claim to a specific set of subcategories - unused in production (the cron wants every
-  // eligible row), but lets a test scope this otherwise table-wide UPDATE to just its own fixtures, the same
-  // concern 04-dbos.md raises about testing resetMidnightStats-shaped jobs against a shared dev DB.
+  // Claims every eligible subcategory plus its cards (so claimUnannouncedCards never re-surfaces them); onlyIds lets a test scope this table-wide UPDATE to its own fixtures.
   static claimUnannouncedSubcategories = maybeTransaction('claimUnannouncedSubcategories', async (client, cutoff: Date, onlyIds?: number[]) => {
     const claimConditions = [isNull(subcategories.announcedAt), lt(subcategories.createdAt, cutoff)];
     if (onlyIds) claimConditions.push(inArray(subcategories.id, onlyIds));
@@ -1000,9 +995,7 @@ export class CardsDB {
     }));
   })
 
-  // Atomically claims every card older than cutoff that hasn't been posted about yet. Cards belonging to a
-  // subcategory just claimed by claimUnannouncedSubcategories are already marked by that call, so they never
-  // show up here too - no exclude-list needed. onlyIds: see claimUnannouncedSubcategories's note.
+  // Claims every eligible card; ones already claimed via claimUnannouncedSubcategories are skipped naturally. onlyIds: see claimUnannouncedSubcategories's note.
   static claimUnannouncedCards = maybeTransaction('claimUnannouncedCards', async (client, cutoff: Date, onlyIds?: number[]) => {
     const claimConditions = [isNull(cards.announcedAt), lt(cards.createdAt, cutoff)];
     if (onlyIds) claimConditions.push(inArray(cards.id, onlyIds));

@@ -12,8 +12,7 @@ describe("CardsDB.claimUnannouncedSubcategories", () => {
 
   afterAll(() => fx.cleanup());
 
-  // onlyIds scopes every claim below to just this test's own fixtures - see the method's own comment for why
-  // (the underlying UPDATE is otherwise table-wide, unsafe to run unscoped against a shared dev DB from a test).
+  // onlyIds scopes every claim below to just this test's own fixtures - the underlying UPDATE is otherwise table-wide.
 
   test("claims a subcategory older than cutoff along with its cards, but only once", async () => {
     const subcategoryId = (await fx.subcategory({ categoryId, name: "Test Claim Subcategory" })).id;

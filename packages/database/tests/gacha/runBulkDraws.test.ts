@@ -229,8 +229,7 @@ describe("GachaLogic.runBulkDraws", () => {
     await CardsDB.updateSubcategory(secondarySubId, { isSecondary: true });
     await fx.card({ name: "Test Bulk Secondary Card", subcategoryId: secondarySubId });
 
-    // the category has exactly one subcategory and it's secondary, so the filtered pool is empty -
-    // runBulkDraws must skip the category entirely (same as "no subcategories at all"), never draw from it.
+    // sole subcategory is secondary, so the filtered pool is empty - must skip the category like "no subcategories at all".
     const { draws: results } = await GachaLogic.runBulkDraws(userId, Array(20).fill(soloCategoryId), 100, 1);
     expect(results).toEqual([]);
   });

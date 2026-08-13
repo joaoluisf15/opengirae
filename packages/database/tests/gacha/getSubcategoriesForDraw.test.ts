@@ -13,8 +13,7 @@ describe("GachaLogic.getSubcategoriesForDraw", () => {
     categoryId = (await fx.category({ name: `Test Draw Subs Category ${Date.now()}` })).id;
     primarySubId = (await fx.subcategory({ categoryId, name: "Test Draw Subs Primary" })).id;
     secondarySubId = (await fx.subcategory({ categoryId, name: "Test Draw Subs Secondary" })).id;
-    // isSecondary can't be set at creation (CardsDB.createSubcategory has no such param) - it's an
-    // admin-panel-only toggle (website/src/routes/admin/subcategories), so flip it via updateSubcategory.
+    // isSecondary is an admin-panel-only toggle, not a createSubcategory param - flip it via updateSubcategory.
     await CardsDB.updateSubcategory(secondarySubId, { isSecondary: true });
   });
 

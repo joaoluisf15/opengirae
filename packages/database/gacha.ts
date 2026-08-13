@@ -86,9 +86,7 @@ export class GachaLogic {
   static selectCard(pool: CardForDraw[], luckModifier: number): CardForDraw | undefined {
     if (pool.length === 0) return undefined;
 
-    // a tier's *total* pull-weight must not scale with how many cards happen to be catalogued at
-    // that tier - dividing by tier size keeps a rarity's total probability mass fixed regardless
-    // of catalog size, instead of every extra common diluting the rest of the pool.
+    // dividing by tier size keeps a rarity's total pull-weight fixed regardless of how many cards are catalogued at it.
     const countByRank = new Map<number, number>();
     for (const c of pool) countByRank.set(c.rank, (countByRank.get(c.rank) ?? 0) + 1);
 
