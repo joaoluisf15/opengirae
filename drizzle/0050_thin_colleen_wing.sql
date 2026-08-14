@@ -1,0 +1,1 @@
+ALTER TABLE "store_items" ADD COLUMN "announcedAt" timestamp;

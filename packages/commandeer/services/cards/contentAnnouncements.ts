@@ -7,8 +7,9 @@ import { EMOJI } from '../../constants'
 
 const MAX_LISTED_CARDS = 30
 // synthetic author for a cron-originated message - no real user triggered this send.
-const ANNOUNCEMENT_AUTHOR_ID = '0'
-const ANNOUNCEMENT_AUTHOR_NAME = 'openGIRAÊ'
+// shared with vanityAnnouncements.ts, which announces new store items via the same cron tick.
+export const ANNOUNCEMENT_AUTHOR_ID = '0'
+export const ANNOUNCEMENT_AUTHOR_NAME = 'openGIRAÊ'
 
 interface AnnouncementCard {
   id: number

@@ -3,8 +3,10 @@ import { UsersDB } from '@girae/database/users'
 import { EconomyDB } from '@girae/database/economy'
 import { StorefrontDB } from '@girae/database/storefront'
 import { CardsDB } from '@girae/database/cards'
+import { VanitiesDB } from '@girae/database/vanities'
 import { info } from '@girae/common/logger'
 import { announceNewSubcategory, announceNewCardsGroup, groupCardsBySubcategory } from './services/cards/contentAnnouncements'
+import { announceNewVanityItems } from './services/vanity/vanityAnnouncements'
 
 const ANNOUNCEMENT_LOOKBACK_MS = 60 * 60 * 1000
 
@@ -46,6 +48,11 @@ export class CronJobs {
     const newCards = await CardsDB.claimUnannouncedCards(cutoff)
     for (const group of groupCardsBySubcategory(newCards)) {
       await announceNewCardsGroup(chatId, threadId, group, schedTime)
+    }
+
+    for (const type of ['background', 'sticker'] as const) {
+      const claimed = await VanitiesDB.claimUnannouncedStoreItems(type, schedTime, cutoff)
+      if (claimed.length > 0) await announceNewVanityItems(chatId, threadId, type, schedTime)
     }
   }
 }
