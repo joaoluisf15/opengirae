@@ -10,7 +10,7 @@ type Subcategory = NonNullable<Awaited<ReturnType<typeof CardsDB.getSubcategory>
 export default class WishlistCategoryCommand extends Command {
   static override info = {
     name: 'wlcat',
-    description: 'Adiciona todos os cards de uma subcategoria à sua lista de desejos',
+    description: 'Adiciona ou remove todos os cards de uma subcategoria da sua lista de desejos',
     usage: '/wlcat <id ou nome da subcategoria>',
     aliases: ['wlcol', 'wishcol'],
   }
@@ -35,7 +35,8 @@ export default class WishlistCategoryCommand extends Command {
     }
 
     if (added.length === 0) {
-      await reply(ctx, `Todos os cards de **${escapeMarkdown(args.subcategory.name)}** já estão na sua lista de desejos.`)
+      await CardsDB.removeManyFromWishlist(viewer.id, cardsInSubcategory.map(c => c.id))
+      await reply(ctx, `💔 **${escapeMarkdown(args.subcategory.name)}** foi removido da sua lista de desejos.`)
       return
     }
 
