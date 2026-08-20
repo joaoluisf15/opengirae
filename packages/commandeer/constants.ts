@@ -13,6 +13,7 @@ export const EMOJI = {
   goal: '⭐',
   newContent: '➕',
   date: '📅',
+  shop: '🛍',
 }
 
 const CATIVEIRO_TIERS: Array<[min: number, emoji: string]> = [

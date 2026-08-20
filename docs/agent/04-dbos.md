@@ -90,9 +90,34 @@ with multiple replicas).
   with `announcedAt IS NULL` — see `CardsDB.claimUnannouncedSubcategories`/
   `claimUnannouncedCards`, `packages/database/cards.ts`) is called from
   inside `runStorefrontRefresh` for the same reason: both already run every
-  6h (`0 */6 * * *`). Only reach for a genuinely new `scheduleName`/cron
-  entry when the timing actually differs (a different time of day, a
-  different frequency) from what already exists.
+  6h (`0 */6 * * *`). The same method also claims+announces new vanity store
+  items (`VanitiesDB.claimUnannouncedStoreItems`/`getStoreItemsForAnnouncementBatch`,
+  `packages/database/vanities.ts`; rendering/sending in
+  `packages/commandeer/services/vanity/vanityAnnouncements.ts`) for the same
+  reason. Only reach for a genuinely new `scheduleName`/cron entry when the
+  timing actually differs (a different time of day, a different frequency)
+  from what already exists.
+  - `claimUnannouncedSubcategories`'s per-subcategory `cards` list is every
+    card whose *current* main (`cardSubcategories.isMain`) link points at that
+    subcategory, not just the ones this call happens to also mark
+    `announcedAt` on. A card that already had `announcedAt` set (from an
+    earlier announcement under a different subcategory) and then got moved
+    into the new subcategory via `setCardMainSubcategory` is deliberately
+    left alone by the `UPDATE ... WHERE announcedAt IS NULL` claim, but still
+    shown in the new subcategory's card list — a new-collection announcement
+    should read as "here's what's in it now," not just "here's what's
+    brand-new." Don't narrow that listing query back down to only the
+    freshly-claimed cards; that's the exact bug this was fixed from.
+  - One deliberate deviation from the cards/subcategories claim: it stamps
+    `announcedAt` with the cron's `schedTime` (not `sql\`now()\``), so every
+    item claimed in the same tick shares one exact value, used as the batch
+    key to re-fetch the whole claimed set (`VanitiesDB.getStoreItemsForAnnouncementBatch`)
+    when building the announcement. Unlike the cards/subcategories announcement
+    (`contentAnnouncements.ts`, which caps its card list and paginates via a
+    `@Page`), the vanity announcement (`vanityAnnouncements.ts`'s
+    `announceNewVanityItems`) sends every item from the batch in one message,
+    with no cap and no buttons — a single `sendMessage`/`sendPhoto` job, not a
+    `@Page`-driven broadcast.
 - **`resetMidnightStats()` (and any job shaped like it) updates every row in
   `users` with no per-user `WHERE` scoping** — correct for a real scheduled
   run, but means it should never be called from a test against a shared dev

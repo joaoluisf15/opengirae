@@ -22,6 +22,8 @@ export const storeItems = pgTable("store_items", {
     itemURL: text().notNull(),
 
     createdAt: timestamp().notNull().defaultNow(),
+    // set to the cron's schedTime once claimed - also doubles as the announcement's pagination batch key
+    announcedAt: timestamp(),
 
     isAvailable: boolean().notNull().default(true),
     isSearchable: boolean().notNull().default(true)

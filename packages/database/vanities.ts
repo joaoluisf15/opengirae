@@ -2,7 +2,7 @@ import { maybeTransaction } from "./decorators";
 import { storeItems, boughtItems, type storeItemTypes } from "./schemas/vanities";
 import { users, userProfiles } from "./schemas/users";
 import { EconomyDB } from "./economy";
-import { and, desc, eq, gte, ilike, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNull, lt, sql } from "drizzle-orm";
 
 type StoreItemType = (typeof storeItemTypes.enumValues)[number]
 
@@ -228,5 +228,30 @@ export class VanitiesDB {
 
   static deleteStoreItem = maybeTransaction('deleteStoreItem', async (client, id: number) => {
     return await client.delete(storeItems).where(eq(storeItems.id, id)).returning().then(a => a?.[0]);
+  })
+
+  // stamps announcedAt with schedTime (not now()) so a whole claimed batch shares one pagination key
+  static claimUnannouncedStoreItems = maybeTransaction('claimUnannouncedStoreItems', async (
+    client, type: StoreItemType, schedTime: Date, cutoff: Date, onlyIds?: number[],
+  ) => {
+    const claimConditions = [isNull(storeItems.announcedAt), eq(storeItems.type, type), lt(storeItems.createdAt, cutoff)];
+    if (onlyIds) claimConditions.push(inArray(storeItems.id, onlyIds));
+
+    return await client
+      .update(storeItems)
+      .set({ announcedAt: schedTime })
+      .where(and(...claimConditions))
+      .returning({ id: storeItems.id, title: storeItems.title, itemURL: storeItems.itemURL });
+  })
+
+  // re-fetches a claimed batch by (type, announcedAt) - used to render the full announcement message
+  static getStoreItemsForAnnouncementBatch = maybeTransaction('getStoreItemsForAnnouncementBatch', async (
+    client, type: StoreItemType, announcedAt: Date,
+  ) => {
+    return await client
+      .select({ id: storeItems.id, title: storeItems.title, itemURL: storeItems.itemURL })
+      .from(storeItems)
+      .where(and(eq(storeItems.type, type), eq(storeItems.announcedAt, announcedAt)))
+      .orderBy(storeItems.id);
   })
 }

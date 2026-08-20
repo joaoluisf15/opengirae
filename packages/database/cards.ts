@@ -18,7 +18,7 @@ import {
 } from "./schemas/cards";
 import { users } from "./schemas/users";
 import { eq, and, sql, ilike, desc, gte, gt, inArray, isNull, lt } from "drizzle-orm";
-import { CARD_DISCARD_REWARDS, SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER } from "./constants";
+import { CARD_DISCARD_REWARDS, SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER, calculateCardDiscardReward } from "./constants";
 import { EconomyDB } from "./economy";
 import type { DrizzleClient } from "./decorators";
 
@@ -938,7 +938,7 @@ export class CardsDB {
       .orderBy(subcategories.id);
   })
 
-  // Claims every eligible subcategory plus its cards (so claimUnannouncedCards never re-surfaces them); onlyIds lets a test scope this table-wide UPDATE to its own fixtures.
+  // Claims every eligible subcategory and marks its not-yet-announced cards; onlyIds scopes this table-wide UPDATE to a test's own fixtures.
   static claimUnannouncedSubcategories = maybeTransaction('claimUnannouncedSubcategories', async (client, cutoff: Date, onlyIds?: number[]) => {
     const claimConditions = [isNull(subcategories.announcedAt), lt(subcategories.createdAt, cutoff)];
     if (onlyIds) claimConditions.push(inArray(subcategories.id, onlyIds));
@@ -962,14 +962,22 @@ export class CardsDB {
       .from(cardSubcategories)
       .where(and(inArray(cardSubcategories.subcategoryId, subcategoryIds), eq(cardSubcategories.isMain, true)));
     const subcategoryIdByCardId = new Map(mainCardLinks.map(l => [l.cardId, l.subcategoryId] as const));
+    const cardIds = mainCardLinks.map(l => l.cardId);
 
-    const markedCards = mainCardLinks.length === 0 ? [] : await client
-      .update(cards)
-      .set({ announcedAt: sql`now()` })
-      .where(and(isNull(cards.announcedAt), inArray(cards.id, mainCardLinks.map(l => l.cardId))))
-      .returning({ id: cards.id, name: cards.name, rarityId: cards.rarityId });
+    // a card moved in from an already-announced subcategory keeps its announcedAt, but is still listed below.
+    if (cardIds.length > 0) {
+      await client
+        .update(cards)
+        .set({ announcedAt: sql`now()` })
+        .where(and(isNull(cards.announcedAt), inArray(cards.id, cardIds)));
+    }
 
-    const rarityIds = [...new Set(markedCards.map(c => c.rarityId))];
+    const allCards = cardIds.length === 0 ? [] : await client
+      .select({ id: cards.id, name: cards.name, rarityId: cards.rarityId })
+      .from(cards)
+      .where(inArray(cards.id, cardIds));
+
+    const rarityIds = [...new Set(allCards.map(c => c.rarityId))];
     const rarityEmojiById = new Map(
       rarityIds.length === 0 ? [] :
         (await client.select({ id: rarities.id, emoji: rarities.emoji }).from(rarities).where(inArray(rarities.id, rarityIds)))
@@ -977,7 +985,7 @@ export class CardsDB {
     );
 
     const cardsBySubcategory = new Map<number, { id: number; name: string; rarityEmoji: string }[]>();
-    for (const c of markedCards) {
+    for (const c of allCards) {
       const subcategoryId = subcategoryIdByCardId.get(c.id);
       if (subcategoryId === undefined) continue;
       const list = cardsBySubcategory.get(subcategoryId) ?? [];
@@ -1510,6 +1518,7 @@ export class CardsDB {
           subcategoryId: subcategories.id,
           subcategoryName: subcategories.name,
           categoryName: categories.name,
+          categoryEmoji: categories.emoji,
           imageUrl: subcategories.imageUrl,
         })
         .from(subcategoryGoals)
@@ -1598,6 +1607,28 @@ export class CardsDB {
     return result.length
   })
 
+  static getUserTradableCards = maybeTransaction('getUserTradableCards', async (client, userId: number) => {
+    return await client
+      .select({
+        id: cards.id,
+        name: cards.name,
+        imageUrl: cards.imageUrl,
+        rarityName: rarities.name,
+        rarityEmoji: rarities.emoji,
+        categoryEmoji: categories.emoji,
+        subcategoryName: subcategories.name,
+        ownedCount: userCards.count,
+      })
+      .from(userCards)
+      .innerJoin(cards, eq(cards.id, userCards.cardId))
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .leftJoin(cardSubcategories, and(eq(cardSubcategories.cardId, cards.id), eq(cardSubcategories.isMain, true)))
+      .leftJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
+      .leftJoin(categories, eq(categories.id, subcategories.categoryId))
+      .where(and(eq(userCards.userId, userId), eq(userCards.tradable, true)))
+      .orderBy(desc(cards.rarityId), cards.id);
+  })
+
   static compareWishlists = maybeTransaction('compareWishlists', async (client, userId: number, otherUserId: number) => {
     const matchRow = (ownerId: number, wantsId: number) => client
       .select({
@@ -1606,6 +1637,7 @@ export class CardsDB {
         imageUrl: cards.imageUrl,
         rarityName: rarities.name,
         rarityEmoji: rarities.emoji,
+        ownedCount: userCards.count,
       })
       .from(userCards)
       .innerJoin(cards, eq(cards.id, userCards.cardId))
@@ -1811,7 +1843,7 @@ export class CardsDB {
 
     for (const [cardId, qty] of requestedQty) {
       const row = ownedById.get(cardId)!;
-      const reward = Math.round((CARD_DISCARD_REWARDS[row.rarityName] ?? 0) * qty * incomeInflationRate);
+      const reward = calculateCardDiscardReward(row.rarityName, qty, incomeInflationRate);
 
       const [updated] = await client
         .update(userCards)

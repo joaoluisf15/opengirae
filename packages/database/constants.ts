@@ -10,5 +10,10 @@ export const CARD_DISCARD_REWARDS: Record<string, number> = {
   Lendário: 500,
 };
 
+// shared by the preview and the actual credit, so they can't drift apart
+export function calculateCardDiscardReward(rarityName: string, quantity: number, incomeInflationRate: number): number {
+  return Math.round((CARD_DISCARD_REWARDS[rarityName] ?? 0) * quantity * incomeInflationRate);
+}
+
 // bonus over what the same cards would earn discarded individually - rewards finishing the set.
 export const SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER = 1.5;

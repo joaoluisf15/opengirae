@@ -40,6 +40,21 @@ describe("CardsDB.claimUnannouncedSubcategories", () => {
     expect(cardRows).toHaveLength(0);
   });
 
+  test("includes a card moved in from elsewhere that was already announced before", async () => {
+    const oldSubcategoryId = (await fx.subcategory({ categoryId, name: "Test Claim Subcategory Old" })).id;
+    const cardId = (await fx.card({ name: "Test Claim Moved Card", subcategoryId: oldSubcategoryId })).id;
+    const cutoff = new Date();
+    // announce it once under the old subcategory so its cards.announcedAt is already set
+    await CardsDB.claimUnannouncedSubcategories(cutoff, [oldSubcategoryId]);
+
+    const newSubcategoryId = (await fx.subcategory({ categoryId, name: "Test Claim Subcategory New" })).id;
+    await CardsDB.setCardMainSubcategory(cardId, newSubcategoryId);
+
+    const claimed = await CardsDB.claimUnannouncedSubcategories(new Date(), [newSubcategoryId]);
+    expect(claimed).toHaveLength(1);
+    expect(claimed[0]?.cards.map(c => c.id)).toEqual([cardId]);
+  });
+
   test("a subcategory younger than cutoff is not claimed", async () => {
     const subcategoryId = (await fx.subcategory({ categoryId, name: "Test Claim Subcategory Fresh" })).id;
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);

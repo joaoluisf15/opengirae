@@ -5,10 +5,11 @@ import { CardsDB } from '@girae/database/cards'
 import type { IncomingCommand } from '@girae/common/commands/types'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { mention } from '@girae/common/utilities/mention'
+import { cativeiroEmoji } from '../../constants'
 
-type CardRow = { id: number; name: string; rarityName: string; rarityEmoji: string }
+type CardRow = { id: number; name: string; rarityName: string; rarityEmoji: string; ownedCount: number }
 
-const cardLine = (c: CardRow) => `${c.rarityEmoji} \`${c.id}\`. **${escapeMarkdown(c.name)}**`
+const cardLine = (c: CardRow) => `${c.rarityEmoji} \`${c.id}\`. **${escapeMarkdown(c.name)}** \`${c.ownedCount}x\` ${cativeiroEmoji(c.ownedCount)}`
 
 export default class CompareCommand extends Command {
   static override info = {

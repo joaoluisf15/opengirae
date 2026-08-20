@@ -10,7 +10,7 @@ import WlcatCommand from "../../commands/cards/wlcat";
 
 mockTelegram();
 
-describe("/wlcat adds a whole subcategory to the wishlist, add-only", () => {
+describe("/wlcat toggles a whole subcategory on the wishlist", () => {
   const fx = new TestFixtures();
   let userId: number;
   let subcategoryId: number;
@@ -49,12 +49,12 @@ describe("/wlcat adds a whole subcategory to the wishlist, add-only", () => {
     expect(await CardsDB.isOnWishlist(userId, notOnListCardId)).toBe(true);
   });
 
-  test("running it again when everything is already listed adds nothing new (no removals)", async () => {
+  test("running it again when everything is already listed removes the whole subcategory instead", async () => {
     const subcategory = (await CardsDB.getSubcategory(subcategoryId))!;
     await WlcatCommand.execute(ctx(), { subcategory });
 
-    expect(await CardsDB.isOnWishlist(userId, alreadyOnListCardId)).toBe(true);
-    expect(await CardsDB.isOnWishlist(userId, notOnListCardId)).toBe(true);
+    expect(await CardsDB.isOnWishlist(userId, alreadyOnListCardId)).toBe(false);
+    expect(await CardsDB.isOnWishlist(userId, notOnListCardId)).toBe(false);
   });
 
   // exercises the real dispatch path (resolveCommandArguments -> execute), not a hand-built arg,
