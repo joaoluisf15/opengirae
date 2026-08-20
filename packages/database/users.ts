@@ -144,6 +144,19 @@ export class UsersDB {
     return await EconomyDB.deductCoinsToTreasury(client, userId, amount);
   })
 
+  // player-to-player transfer (e.g. /pix) - unlike spendCoins, doesn't touch the treasury since nothing is being bought
+  static transferCoins = maybeTransaction('transferCoins', async (client, fromUserId: number, toUserId: number, amount: number): Promise<boolean> => {
+    const [spendRow] = await client
+      .update(users)
+      .set({ coins: sql`${users.coins} - ${amount}` })
+      .where(and(eq(users.id, fromUserId), gte(users.coins, amount)))
+      .returning();
+    if (!spendRow) return false;
+
+    await client.update(users).set({ coins: sql`${users.coins} + ${amount}` }).where(eq(users.id, toUserId));
+    return true;
+  })
+
   static setFavoriteCard = maybeTransaction('setFavoriteCard', async (client, userId: number, cardId: number) => {
     return await client
       .update(users)

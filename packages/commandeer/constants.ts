@@ -10,7 +10,7 @@ export const EMOJI = {
   page: '📃',
   browse: '👀',
   progress: '📊',
-  goal: '⭐',
+  goal: '💝',
   newContent: '➕',
   date: '📅',
   shop: '🛍',
