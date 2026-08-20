@@ -106,9 +106,13 @@ export const telegramCardsRouter = t.router({
 			offset: z.number().int().nonnegative().optional(),
 		}))
 		.query(async ({ ctx, input }) => {
-			const { subcategoryId, targetUserId, ...opts } = input;
+			const { subcategoryId, targetUserId, ownedFilter, limit = 20, offset = 0 } = input;
 			const subject = await resolveViewSubject(ctx, targetUserId);
-			return CardsDB.getCardsInSubcategoryForUserPaginated(subcategoryId, subject.id, opts);
+			const [stats, rows] = await Promise.all([
+				CardsDB.getSubcategoryStats(subcategoryId, subject.id, { ownedFilter }),
+				CardsDB.getCardsInSubcategoryForUserFiltered(subcategoryId, subject.id, { ownedFilter, limit, offset }),
+			]);
+			return { rows, total: stats.filteredTotal, ownedCount: stats.owned, missingCount: stats.total - stats.owned };
 		}),
 
 	wishlist: telegramProcedure.input(viewingInput).query(async ({ ctx, input }) => {

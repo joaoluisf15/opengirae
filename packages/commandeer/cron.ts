@@ -1,4 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk'
+import { Pool } from 'pg'
 import { UsersDB } from '@girae/database/users'
 import { EconomyDB } from '@girae/database/economy'
 import { StorefrontDB } from '@girae/database/storefront'
@@ -7,6 +8,9 @@ import { info } from '@girae/common/logger'
 import { announceNewSubcategory, announceNewCardsGroup, groupCardsBySubcategory } from './services/cards/contentAnnouncements'
 
 const ANNOUNCEMENT_LOOKBACK_MS = 60 * 60 * 1000
+
+const dbosSystemPool = new Pool({ connectionString: process.env.DBOS_SYSTEM_DATABASE_URL })
+const DBOS_GC_CUTOFF_MS = 3 * 24 * 60 * 60 * 1000
 
 export class CronJobs {
   @DBOS.workflow()
@@ -47,5 +51,15 @@ export class CronJobs {
     for (const group of groupCardsBySubcategory(newCards)) {
       await announceNewCardsGroup(chatId, threadId, group, schedTime)
     }
+  }
+
+  @DBOS.workflow()
+  static async runDbosSystemDbCleanup(schedTime: Date) {
+    const cutoff = schedTime.getTime() - DBOS_GC_CUTOFF_MS
+    const result = await dbosSystemPool.query(
+      `DELETE FROM dbos.workflow_status WHERE created_at < $1 AND status NOT IN ('PENDING', 'ENQUEUED', 'DELAYED')`,
+      [cutoff],
+    )
+    info('cron', `Cleaned up ${result.rowCount} old DBOS workflow_status rows (and their cascaded operation_outputs)`)
   }
 }

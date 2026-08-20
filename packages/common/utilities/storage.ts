@@ -30,11 +30,11 @@ export function guessImageType(headerType: string | null, sourceUrl: string): { 
   return { contentType: headerType ?? "application/octet-stream", ext: "bin" }
 }
 
-export async function uploadFromUrl(sourceUrl: string, keyPrefix: string): Promise<string> {
+export async function uploadFromUrl(sourceUrl: string, keyPrefix: string, isVideo?: boolean): Promise<string> {
   const res = await fetch(sourceUrl)
   if (!res.ok) throw new Error(`uploadFromUrl: failed to fetch source (${res.status})`)
 
-  const { contentType, ext } = guessImageType(res.headers.get("content-type"), sourceUrl)
+  const { contentType, ext } = isVideo ? { contentType: "video/mp4", ext: "mp4" } : guessImageType(res.headers.get("content-type"), sourceUrl)
 
   return uploadBytes(new Uint8Array(await res.arrayBuffer()), keyPrefix, ext, contentType)
 }
