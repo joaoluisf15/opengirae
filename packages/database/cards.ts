@@ -1517,6 +1517,7 @@ export class CardsDB {
           subcategoryId: subcategories.id,
           subcategoryName: subcategories.name,
           categoryName: categories.name,
+          categoryEmoji: categories.emoji,
           imageUrl: subcategories.imageUrl,
         })
         .from(subcategoryGoals)
