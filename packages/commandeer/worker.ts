@@ -140,7 +140,7 @@ export const uploadWorker = new Worker(UPLOAD_QUEUE_NAME, async (job) => {
     ctx: { platform: 'telegram' | 'discord'; authorId: string; authorName: string; chatId: string; threadId?: string }
   }
 
-  const cdnUrl = await uploadFromUrl(photoUrl, 'cativeiro')
+  const cdnUrl = await uploadFromUrl(photoUrl, 'cativeiro', isVideo)
   const mediaType = isVideo ? 'video' as const : 'photo' as const
 
   const result = await CardsDB.createCativeiroSubmission(userId, cardId, cdnUrl, mediaType, {
