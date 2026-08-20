@@ -34,7 +34,8 @@ describe("CardsDB.compareWishlists", () => {
   });
 
   test("shows cards A has that B wants, and cards B has that A wants", async () => {
-    // A owns cardWantedByBId (tradable), B wants it
+    // A owns cardWantedByBId (tradable, 2 copies), B wants it
+    await CardsDB.addUserCard(userAId, cardWantedByBId, 1);
     await CardsDB.addUserCard(userAId, cardWantedByBId, 1);
     await CardsDB.setCardTradable(userAId, cardWantedByBId, true);
     await CardsDB.addToWishlist(userBId, cardWantedByBId);
@@ -46,6 +47,7 @@ describe("CardsDB.compareWishlists", () => {
 
     const result = await CardsDB.compareWishlists(userAId, userBId);
     expect(result.iHaveTheyWant.map(c => c.id)).toEqual([cardWantedByBId]);
+    expect(result.iHaveTheyWant[0]?.ownedCount).toBe(2);
     expect(result.theyHaveIWant.map(c => c.id)).toEqual([cardWantedByAId]);
   });
 

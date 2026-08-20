@@ -1636,6 +1636,7 @@ export class CardsDB {
         imageUrl: cards.imageUrl,
         rarityName: rarities.name,
         rarityEmoji: rarities.emoji,
+        ownedCount: userCards.count,
       })
       .from(userCards)
       .innerJoin(cards, eq(cards.id, userCards.cardId))
