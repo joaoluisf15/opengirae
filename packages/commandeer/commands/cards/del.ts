@@ -2,7 +2,8 @@ import { Command, CommandArgument, CommandArgumentType } from '@girae/common/com
 import { DBOS } from '@dbos-inc/dbos-sdk'
 import { CardsDB } from '@girae/database/cards'
 import { UsersDB } from '@girae/database/users'
-import { CARD_DISCARD_REWARDS } from '@girae/database/constants'
+import { EconomyDB } from '@girae/database/economy'
+import { calculateCardDiscardReward } from '@girae/database/constants'
 import { reply } from '@girae/common/dbos/messaging'
 import type { IncomingCommand } from '@girae/common/commands/types'
 import { escapeMarkdown } from '@girae/common/utilities/markdown'
@@ -69,7 +70,11 @@ export default class DelCommand extends Command {
     const cards = await CardsDB.getCardsByIds(uniqueFinalIds)
     const cardsById = new Map(cards.map(c => [c.id, c]))
 
-    const estimatedTotal = finalIds.reduce((sum, id) => sum + (CARD_DISCARD_REWARDS[cardsById.get(id)!.rarityName] ?? 0), 0)
+    const incomeInflationRate = await EconomyDB.getIncomeInflationRate()
+    const estimatedTotal = uniqueFinalIds.reduce((sum, id) => {
+      const qty = finalQty.get(id)!
+      return sum + calculateCardDiscardReward(cardsById.get(id)!.rarityName, qty, incomeInflationRate)
+    }, 0)
     const list = uniqueFinalIds.map(id => {
       const card = cardsById.get(id)!
       const qty = finalQty.get(id)!

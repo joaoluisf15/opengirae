@@ -18,7 +18,7 @@ import {
 } from "./schemas/cards";
 import { users } from "./schemas/users";
 import { eq, and, sql, ilike, desc, gte, gt, inArray, isNull, lt } from "drizzle-orm";
-import { CARD_DISCARD_REWARDS, SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER } from "./constants";
+import { CARD_DISCARD_REWARDS, SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER, calculateCardDiscardReward } from "./constants";
 import { EconomyDB } from "./economy";
 import type { DrizzleClient } from "./decorators";
 
@@ -1842,7 +1842,7 @@ export class CardsDB {
 
     for (const [cardId, qty] of requestedQty) {
       const row = ownedById.get(cardId)!;
-      const reward = Math.round((CARD_DISCARD_REWARDS[row.rarityName] ?? 0) * qty * incomeInflationRate);
+      const reward = calculateCardDiscardReward(row.rarityName, qty, incomeInflationRate);
 
       const [updated] = await client
         .update(userCards)
