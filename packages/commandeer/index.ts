@@ -32,6 +32,11 @@ await DBOS.applySchedules([
         scheduleName: 'storefront-refresh',
         workflowFn: CronJobs.runStorefrontRefresh,
         schedule: '0 */6 * * *',
+    },
+    {
+        scheduleName: 'dbos-system-db-cleanup',
+        workflowFn: CronJobs.runDbosSystemDbCleanup,
+        schedule: '0 5 * * *',
     }
 ])
 
