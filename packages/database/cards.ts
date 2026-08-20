@@ -1606,6 +1606,28 @@ export class CardsDB {
     return result.length
   })
 
+  static getUserTradableCards = maybeTransaction('getUserTradableCards', async (client, userId: number) => {
+    return await client
+      .select({
+        id: cards.id,
+        name: cards.name,
+        imageUrl: cards.imageUrl,
+        rarityName: rarities.name,
+        rarityEmoji: rarities.emoji,
+        categoryEmoji: categories.emoji,
+        subcategoryName: subcategories.name,
+        ownedCount: userCards.count,
+      })
+      .from(userCards)
+      .innerJoin(cards, eq(cards.id, userCards.cardId))
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .leftJoin(cardSubcategories, and(eq(cardSubcategories.cardId, cards.id), eq(cardSubcategories.isMain, true)))
+      .leftJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
+      .leftJoin(categories, eq(categories.id, subcategories.categoryId))
+      .where(and(eq(userCards.userId, userId), eq(userCards.tradable, true)))
+      .orderBy(desc(cards.rarityId), cards.id);
+  })
+
   static compareWishlists = maybeTransaction('compareWishlists', async (client, userId: number, otherUserId: number) => {
     const matchRow = (ownerId: number, wantsId: number) => client
       .select({
