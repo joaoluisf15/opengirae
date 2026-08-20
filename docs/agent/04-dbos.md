@@ -97,6 +97,17 @@ with multiple replicas).
   reason. Only reach for a genuinely new `scheduleName`/cron entry when the
   timing actually differs (a different time of day, a different frequency)
   from what already exists.
+  - `claimUnannouncedSubcategories`'s per-subcategory `cards` list is every
+    card whose *current* main (`cardSubcategories.isMain`) link points at that
+    subcategory, not just the ones this call happens to also mark
+    `announcedAt` on. A card that already had `announcedAt` set (from an
+    earlier announcement under a different subcategory) and then got moved
+    into the new subcategory via `setCardMainSubcategory` is deliberately
+    left alone by the `UPDATE ... WHERE announcedAt IS NULL` claim, but still
+    shown in the new subcategory's card list — a new-collection announcement
+    should read as "here's what's in it now," not just "here's what's
+    brand-new." Don't narrow that listing query back down to only the
+    freshly-claimed cards; that's the exact bug this was fixed from.
   - One deliberate deviation from the cards/subcategories claim: it stamps
     `announcedAt` with the cron's `schedTime` (not `sql\`now()\``), so every
     item claimed in the same tick shares one exact value, used as the batch
