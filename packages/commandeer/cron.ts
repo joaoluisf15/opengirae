@@ -69,14 +69,4 @@ export class CronJobs {
     )
     info('cron', `Cleaned up ${result.rowCount} old DBOS workflow_status rows (and their cascaded operation_outputs)`)
   }
-
-  @DBOS.workflow()
-  static async runDbosSystemDbCleanup(schedTime: Date) {
-    const cutoff = schedTime.getTime() - DBOS_GC_CUTOFF_MS
-    const result = await dbosSystemPool.query(
-      `DELETE FROM dbos.workflow_status WHERE created_at < $1 AND status NOT IN ('PENDING', 'ENQUEUED', 'DELAYED')`,
-      [cutoff],
-    )
-    info('cron', `Cleaned up ${result.rowCount} old DBOS workflow_status rows (and their cascaded operation_outputs)`)
-  }
 }
