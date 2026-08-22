@@ -978,20 +978,21 @@ export class CardsDB {
       .where(inArray(cards.id, cardIds));
 
     const rarityIds = [...new Set(allCards.map(c => c.rarityId))];
-    const rarityEmojiById = new Map(
-      rarityIds.length === 0 ? [] :
-        (await client.select({ id: rarities.id, emoji: rarities.emoji }).from(rarities).where(inArray(rarities.id, rarityIds)))
-          .map(r => [r.id, r.emoji] as const)
-    );
+    const rarityRows = rarityIds.length === 0 ? [] :
+      await client.select({ id: rarities.id, emoji: rarities.emoji, weight: rarities.weight }).from(rarities).where(inArray(rarities.id, rarityIds));
+    const rarityEmojiById = new Map(rarityRows.map(r => [r.id, r.emoji] as const));
+    const rarityWeightById = new Map(rarityRows.map(r => [r.id, r.weight] as const));
 
-    const cardsBySubcategory = new Map<number, { id: number; name: string; rarityEmoji: string }[]>();
+    const cardsBySubcategory = new Map<number, { id: number; name: string; rarityEmoji: string; rarityWeight: number }[]>();
     for (const c of allCards) {
       const subcategoryId = subcategoryIdByCardId.get(c.id);
       if (subcategoryId === undefined) continue;
       const list = cardsBySubcategory.get(subcategoryId) ?? [];
-      list.push({ id: c.id, name: c.name, rarityEmoji: rarityEmojiById.get(c.rarityId) ?? '' });
+      list.push({ id: c.id, name: c.name, rarityEmoji: rarityEmojiById.get(c.rarityId) ?? '', rarityWeight: rarityWeightById.get(c.rarityId) ?? 0 });
       cardsBySubcategory.set(subcategoryId, list);
     }
+    // lower weight = rarer (RARITY_RANK_SQL in gacha.ts)
+    for (const list of cardsBySubcategory.values()) list.sort((a, b) => a.rarityWeight - b.rarityWeight || a.id - b.id);
 
     return claimedSubcategories.map(s => ({
       id: s.id,
@@ -999,7 +1000,7 @@ export class CardsDB {
       categoryEmoji: categoryEmojiById.get(s.categoryId) ?? '🏷️',
       imageUrl: s.imageUrl,
       createdAt: s.createdAt,
-      cards: cardsBySubcategory.get(s.id) ?? [],
+      cards: (cardsBySubcategory.get(s.id) ?? []).map(({ id, name, rarityEmoji }) => ({ id, name, rarityEmoji })),
     }));
   })
 
@@ -1031,7 +1032,8 @@ export class CardsDB {
       .innerJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
       .innerJoin(categories, eq(categories.id, subcategories.categoryId))
       .where(inArray(cards.id, claimed.map(c => c.id)))
-      .orderBy(subcategories.id, desc(cards.rarityId), cards.id);
+      // lower weight = rarer (RARITY_RANK_SQL in gacha.ts)
+      .orderBy(subcategories.id, rarities.weight, cards.id);
   })
 
   static getCardsInSubcategoryForUser = maybeTransaction('getCardsInSubcategoryForUser', async (client, subcategoryId: number, userId: number) => {
