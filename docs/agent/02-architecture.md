@@ -115,9 +115,11 @@ export default class MyHook {
 ## `services/` layout
 
 `packages/commandeer/services/` is split by domain: `cards/`, `vanity/`,
-`gacha/`, `users/` hold logic specific to that domain (e.g.
+`gacha/`, `users/`, `auctions/` hold logic specific to that domain (e.g.
 `services/cards/cativeiro.ts`, `services/vanity/vanityWizard.ts`,
-`services/gacha/girarClaim.ts`). Framework-core files that every domain
+`services/gacha/girarClaim.ts`, `services/auctions/notifications.ts` — see
+`04-dbos.md`'s "Scheduled workflows" section for the notification-outbox
+pattern this one implements). Framework-core files that every domain
 depends on — `commandArguments.ts`, `commands.ts`, `guards.ts`,
 `syntheticCtx.ts`, `botInfo.ts`, `supportChannel.ts` — stay flat at
 `services/` root rather than being forced into one domain folder. When adding

@@ -66,8 +66,19 @@ with multiple replicas).
   await DBOS.applySchedules([
     { scheduleName: 'daily-midnight-reset', workflowFn: CronJobs.runMidnightReset, schedule: '0 3 * * *' },
     { scheduleName: 'hourly-draw-decay', workflowFn: CronJobs.runHourlyDrawDecay, schedule: '0 * * * *' },
+    { scheduleName: 'auction-sweep', workflowFn: CronJobs.runAuctionSweep, schedule: '* * * * *' },
   ])
   ```
+  `runAuctionSweep` is the once-a-minute example of the fastest cadence in the system so far —
+  settles expired `/leiloar` auctions (`AuctionsDB.sweepExpiredAuctions`) and drains two
+  notification outboxes (`services/auctions/notifications.ts`'s `sendOutbidNotifications`/
+  `sendResolutionNotifications`). The outbox pattern itself is worth knowing about for any future
+  feature the **website** can trigger: `@girae/database` has no messaging access (see
+  `02-architecture.md`), so a DB write that needs to notify someone can't just call `reply()`
+  inline — it may be running inside a tRPC mutation, not commandeer. Instead the write stamps a
+  `notifiedAt IS NULL` column (`auctionBids.notifiedAt`, `auctions.resolutionNotifiedAt`), and a
+  cron tick claims (`UPDATE ... WHERE notifiedAt IS NULL RETURNING *`, same claim-then-act shape
+  as everything else here) and sends from inside commandeer, which does have messaging access.
   `schedule` is a standard 5-field cron string, evaluated in the server's
   timezone (the existing jobs assume UTC — `runMidnightReset` fires at 3:00
   UTC, matching `/daily`'s own `getTimeUntilMidnight()` cutoff, not literal
@@ -295,6 +306,26 @@ my mode-specific inputs, then call the shared wizard."
 
 ## Common gotchas
 
+- **Running `bun test` against a local dev environment can silently break the
+  live dev bot's scheduled crons (`runAuctionSweep`, etc.).** `bun test`
+  boots its own throwaway DBOS instance (`bootstrapCommandeerWorkers`) that
+  registers into the *same* `DBOS_SYSTEM_DATABASE_URL` your persistent
+  `dev:commandeer` process uses locally - and it computes a different
+  application-version hash than the plain `index.ts` entrypoint does (it
+  pulls in more code). DBOS's scheduler routes new scheduled-workflow ticks
+  to whichever `dbos.application_versions` row has the newest
+  `version_timestamp` - so every test run stamps a newer "latest version"
+  that no long-running dev process actually matches, and every scheduled tick
+  since then piles up stuck in `ENQUEUED` forever (silently - nothing
+  crashes, nothing logs an error, the cron just stops firing). Symptom: dev
+  commandeer's boot log says `Current version 'X' is not the latest version.
+  Latest version is 'Y'` and `dbos.workflow_status` has a growing pile of
+  `ENQUEUED` rows for cron jobs. Fix: `DELETE FROM dbos.application_versions
+  WHERE version_name = '<Y>'` (the phantom test-mode hash, not your dev
+  process's own), clean up the orphaned `ENQUEUED`/`PENDING` rows for it, and
+  restart the affected dev worker process. This isn't a one-time fix - it
+  recurs every time `bun test` runs afterward, so don't be surprised if a
+  cron that was working an hour ago is stuck again after a test run.
 - **`telegramsjs`'s `editMessageMedia` wrapper is broken for URL-based
   media** — its request builder switches to multipart form-encoding whenever
   a payload has a top-level `media` key (checked by field *name*, not

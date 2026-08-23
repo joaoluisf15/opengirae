@@ -152,6 +152,50 @@
 			syncing = false;
 		}
 	}
+
+	// --- /leiloar fees + kill switch ---
+
+	let listingFeePercent = $state(String((data.state.auctionListingFeeMultiplier - 1) * 100));
+	let insuranceFeePercent = $state(String((data.state.auctionInsuranceFeeMultiplier - 1) * 100));
+	let savingAuctionFees = $state(false);
+	let auctionsEnabled = $state(data.state.auctionsEnabled);
+	let togglingAuctions = $state(false);
+
+	async function saveAuctionFees() {
+		const listingPercent = Number(listingFeePercent);
+		const insurancePercent = Number(insuranceFeePercent);
+		if (isNaN(listingPercent) || isNaN(insurancePercent)) {
+			toast.error('Valor inválido');
+			return;
+		}
+		savingAuctionFees = true;
+		try {
+			const updated = await trpc().economy.setAuctionFees.mutate({
+				listingMultiplier: 1 + listingPercent / 100,
+				insuranceMultiplier: 1 + insurancePercent / 100,
+			});
+			listingFeePercent = String((updated.auctionListingFeeMultiplier - 1) * 100);
+			insuranceFeePercent = String((updated.auctionInsuranceFeeMultiplier - 1) * 100);
+			toast.success('Taxas do leilão atualizadas');
+		} catch {
+			toast.error('Falha ao atualizar as taxas do leilão');
+		} finally {
+			savingAuctionFees = false;
+		}
+	}
+
+	async function toggleAuctionsEnabled() {
+		togglingAuctions = true;
+		try {
+			const updated = await trpc().economy.setAuctionsEnabled.mutate({ enabled: !auctionsEnabled });
+			auctionsEnabled = updated.auctionsEnabled;
+			toast.success(auctionsEnabled ? 'Leilões ativados' : 'Leilões desativados');
+		} catch {
+			toast.error('Falha ao mudar o estado dos leilões');
+		} finally {
+			togglingAuctions = false;
+		}
+	}
 </script>
 
 <h1 class="text-ink mb-6 text-2xl font-bold">Economia</h1>
@@ -265,6 +309,35 @@
 			{/each}
 		</tbody>
 	</table>
+</div>
+
+<div class="border-line bg-panel mt-6 max-w-3xl rounded-xl border p-5">
+	<div class="mb-3 flex items-center justify-between">
+		<h2 class="text-ink text-sm font-semibold">Leilões (/leiloar)</h2>
+		<button class="btn {auctionsEnabled ? 'btn-ghost text-red-500' : 'btn-default'}" disabled={togglingAuctions} onclick={toggleAuctionsEnabled}>
+			{auctionsEnabled ? 'Desativar leilões' : 'Ativar leilões'}
+		</button>
+	</div>
+	<p class="text-ink-dim mb-4 text-xs">
+		Interruptor de emergência - desativar bloqueia leilões e lances novos na hora, sem precisar de deploy. Leilões já a decorrer continuam a fechar normalmente.
+	</p>
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<label class="text-ink-dim text-xs" for="listingFee">
+			Taxa de publicação (a mais, sobre o valor-base da carta)
+			<div class="relative mt-1 w-24">
+				<input id="listingFee" type="text" inputmode="decimal" bind:value={listingFeePercent} class="field pr-6" />
+				<span class="text-ink-dim pointer-events-none absolute inset-y-0 right-3 flex items-center">%</span>
+			</div>
+		</label>
+		<label class="text-ink-dim text-xs" for="insuranceFee">
+			Taxa extra do seguro (a mais, sobre a taxa de publicação)
+			<div class="relative mt-1 w-24">
+				<input id="insuranceFee" type="text" inputmode="decimal" bind:value={insuranceFeePercent} class="field pr-6" />
+				<span class="text-ink-dim pointer-events-none absolute inset-y-0 right-3 flex items-center">%</span>
+			</div>
+		</label>
+	</div>
+	<button class="btn btn-default mt-4" disabled={savingAuctionFees} onclick={saveAuctionFees}>Salvar</button>
 </div>
 
 <Modal bind:open={treasuryModalOpen} title="Editar tesouro">

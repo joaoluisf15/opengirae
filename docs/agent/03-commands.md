@@ -305,9 +305,16 @@ instead of trusting a diff by eye.
     can lag by a second or more even after the promise resolves — this
     genuinely bit a real test in this codebase and cost real debugging time
     chasing a phantom "flaky infra" issue before landing on the fix below.
-  - Prefer asserting the same underlying guard/DB state the command checks,
-    or `expect(promise).resolves.toBeUndefined()` to prove it didn't throw,
-    rather than racing the reply queue.
+  - Prefer asserting the same underlying guard/DB state the command checks
+    rather than racing the reply queue. **Avoid `expect(promise).resolves.toBeUndefined()`**
+    specifically — under `bun test` (v1.3.14) this has been observed to hang
+    the whole file past its 5s timeout even when the awaited command
+    resolves in milliseconds (confirmed via a standalone repro script
+    calling the exact same command outside `bun test`, which returned
+    instantly). A plain `await theCommand.execute(...)` proves the same
+    thing (no throw) without the matcher. This cost real debugging time on
+    the `/leiloar`/`/lance` tests before the pattern itself was found to
+    be the cause, not the command code.
   - **Never `mock.module()` a shared module** (like
     `@girae/common/dbos/messaging`) at the top of a test file expecting an
     `afterAll` to cleanly restore it — `bun test` shares one module registry

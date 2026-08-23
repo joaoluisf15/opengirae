@@ -14,6 +14,8 @@ export const EMOJI = {
   newContent: '➕',
   date: '📅',
   shop: '🛍',
+  auction: '🔨',
+  inAuction: '📣',
 }
 
 const CATIVEIRO_TIERS: Array<[min: number, emoji: string]> = [

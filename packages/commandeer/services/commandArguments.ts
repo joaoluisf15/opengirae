@@ -88,6 +88,12 @@ async function parseCard(raw: string, ctx?: IncomingCommand, opts?: { paginatedA
     return card ? { ok: true, value: card } : { ok: false, message: 'Não encontrei um personagem com esse ID.' }
   }
 
+  const byAlias = await CardsDB.getCardByAlias(raw)
+  if (byAlias) {
+    const card = await CardsDB.getCardWithDetails(byAlias.id)
+    if (card) return { ok: true, value: card }
+  }
+
   const results = await CardsDB.searchCardsByName(raw, 100)
   if (results.length === 0) return { ok: false, message: 'Não encontrei um personagem com esse nome.' }
   if (results.length > 1) {
