@@ -77,6 +77,11 @@ export async function resolveDiscotecaAlbumByIdOrName(raw: string): Promise<Pars
   return parseDiscotecaEntry(raw, 'album')
 }
 
+// no entryType - matches an album OR a single, for commands that don't care which.
+export async function resolveDiscotecaEntryByIdOrName(raw: string): Promise<ParseOutcome> {
+  return parseDiscotecaEntry(raw)
+}
+
 export async function resolveDiscotecaArtistByIdOrName(raw: string): Promise<ParseOutcome> {
   return parseDiscotecaArtist(raw)
 }

@@ -293,6 +293,15 @@ doesn't own or duplicate the mutation logic. Reach for this shape whenever a
 workflow needs to react to actions that don't arrive as a click on a message
 it's itself holding open.
 
+`/tradedisco` (Discoteca album/single trading, `packages/commandeer/commands/discoteca/tradedisco.ts`)
+is the same negotiation shape applied to a second, independent domain - its
+own `tradedisco:state:{workflowID}`/`tradedisco:lock:{telegramId}` Redis
+prefixes and its own `@QuickView` names (`tradeDiscoItem`/`tradeReadyDisco`)
+so a user can be mid-negotiation on `/trade` and `/tradedisco` at the same
+time without the two systems' state colliding. If a third domain ever needs
+the same shape, that's the point to extract the common loop rather than
+copy-pasting a third time.
+
 ## Shared wizards: when two commands need (almost) the same workflow
 
 Extract the loop into a plain function under `packages/commandeer/services/`
@@ -326,6 +335,20 @@ my mode-specific inputs, then call the shared wizard."
   restart the affected dev worker process. This isn't a one-time fix - it
   recurs every time `bun test` runs afterward, so don't be surprised if a
   cron that was working an hour ago is stuck again after a test run.
+- **`bun test` must be run from the repo root, not from inside a package
+  directory.** `bunfig.toml`'s `[test] preload` (which sets up
+  `BULLMQ_QUEUE_SUFFIX` and the Apple Music mock before any command file
+  loads) is a path relative to the invocation's CWD. Run `cd
+  packages/database && bun test tests/foo.test.ts` and every
+  `@DBOS.workflow()`/`@DBOS.transaction()` decorator in the import graph
+  crashes at module-load time with `TypeError: undefined is not an object
+  (evaluating 'descriptor.value')` inside `dbos-sdk`'s
+  `wrapDBOSFunctionAndRegisterByTarget` - even for files that were passing
+  moments earlier and haven't changed. It reproduces on any pre-existing,
+  untouched test file, not just new ones, so don't mistake it for a real
+  regression. Always invoke `bun test <path>` from the repo root (paths can
+  still point into subpackages, e.g. `bun test
+  packages/database/tests/foo.test.ts`).
 - **`telegramsjs`'s `editMessageMedia` wrapper is broken for URL-based
   media** — its request builder switches to multipart form-encoding whenever
   a payload has a top-level `media` key (checked by field *name*, not

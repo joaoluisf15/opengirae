@@ -352,6 +352,10 @@ export const trades = pgTable(
     user2Id: integer().notNull().references(() => users.id),
     cardsUser1: integer().array().notNull(),
     cardsUser2: integer().array().notNull(),
+    // Discoteca entry ids offered by each side, same flatten-by-count shape as cardsUser1/2 -
+    // see CardsDB.executeMixedTrade.
+    discotecaUser1: integer().array().notNull().default([]),
+    discotecaUser2: integer().array().notNull().default([]),
     createdAt: timestamp().notNull().defaultNow(),
   },
   (table) => [

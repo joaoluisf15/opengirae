@@ -78,6 +78,25 @@ asked to revert a `/trade`, you'll need to reconstruct it from DBOS
 `workflow_inputs` (see below) since there's no audit trail to start from —
 say so up front rather than assuming one exists.
 
+**Discoteca (album/single) donations have the identical setup under a
+separate namespace.** `/doardisco`/`/doarclcdisco` log
+`discoteca.doar`/`discoteca.doarclc` (metadata: `{recipientUserId, entries:
+[{entryId, count}], artistId?}` — `artistId` only on the `doarclcdisco`
+"whole discography" case, the Discoteca analog of `subcategoryId`).
+`/doacoesdisco @usuário [@usuário2 [página]]` and `/doacaocancelardisco <ID>`
+(`packages/commandeer/commands/discoteca/doacoesdisco.ts`,
+`doacaocancelardisco.ts`) are exact mirrors of `/doacoes`/`/doacaocancelar`,
+backed by `AuditDB.getDiscotecaDonationHistory`/`revertDiscotecaDonation` —
+same claim-lock, same draw→coins→same-rarity-item fallback chain (reusing
+`UsersDB.tryConsumeDrawAsPenaltyWithClient`/`DONATION_REVERT_PENALTY_COINS`,
+so the coin penalty amount and the draw pool are shared with card reverts).
+The two systems are otherwise completely separate: a card donation's audit
+log id and a Discoteca donation's audit log id can collide (auto-increment
+across the whole `audit_logs` table) but `/doacaocancelar` and
+`/doacaocancelardisco` each only ever match their own action names, so
+feeding one command's id to the other just replies "not found," never
+touches the wrong row.
+
 **Caveat on legacy `card.doar` rows logged before per-card quantity
 shipped**: their metadata only has `cardIds` — *distinct* card IDs, with
 duplicates from a quantity >1 collapsed to one entry. `AuditDB.revertDonation`

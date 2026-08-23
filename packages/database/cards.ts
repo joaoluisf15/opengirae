@@ -21,6 +21,7 @@ import { users } from "./schemas/users";
 import { eq, and, sql, ilike, desc, gte, gt, inArray, isNull, lt } from "drizzle-orm";
 import { CARD_DISCARD_REWARDS, SUBCATEGORY_COMPLETION_BONUS_MULTIPLIER, calculateCardDiscardReward } from "./constants";
 import { EconomyDB } from "./economy";
+import { DiscotecaDB } from "./discoteca";
 import type { DrizzleClient } from "./decorators";
 
 export interface CativeiroSubmitter {
@@ -792,6 +793,105 @@ export class CardsDB {
         user2Id: userBId,
         cardsUser1: offerA.flatMap(o => Array(o.count).fill(o.cardId)),
         cardsUser2: offerB.flatMap(o => Array(o.count).fill(o.cardId)),
+      })
+      .returning()
+      .then(a => a?.[0]);
+
+    return { trade, crossings };
+  })
+
+  // same as executeTrade (untouched, still the plain card-only path), but each side can also offer Discoteca entries, in one atomic transaction.
+  static executeMixedTrade = maybeTransaction('executeMixedTrade', async (
+    client,
+    userAId: number, cardOfferA: { cardId: number; count: number }[], discoOfferA: { entryId: number; count: number }[],
+    userBId: number, cardOfferB: { cardId: number; count: number }[], discoOfferB: { entryId: number; count: number }[],
+    incomeInflationRate: number,
+  ) => {
+    if (userAId === userBId) throw new Error('executeMixedTrade: userAId and userBId must differ');
+    for (const offer of [cardOfferA, cardOfferB]) {
+      const ids = offer.map(o => o.cardId);
+      if (new Set(ids).size !== ids.length) throw new Error('executeMixedTrade: an offer must not list the same cardId twice');
+      if (offer.some(o => o.count <= 0)) throw new Error('executeMixedTrade: offer counts must be positive');
+    }
+    for (const offer of [discoOfferA, discoOfferB]) {
+      const ids = offer.map(o => o.entryId);
+      if (new Set(ids).size !== ids.length) throw new Error('executeMixedTrade: an offer must not list the same discoteca entry twice');
+      if (offer.some(o => o.count <= 0)) throw new Error('executeMixedTrade: offer counts must be positive');
+    }
+
+    const allOfferedCardIds = [...cardOfferA, ...cardOfferB].map(o => o.cardId);
+    const thresholds = allOfferedCardIds.length
+      ? await client
+        .select({ cardId: cards.id, cativeiroThreshold: rarities.cativeiroThreshold })
+        .from(cards)
+        .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+        .where(inArray(cards.id, allOfferedCardIds))
+      : [];
+    const thresholdByCardId = new Map(thresholds.map(t => [t.cardId, t.cativeiroThreshold]));
+
+    const decrementCard = async (userId: number, cardId: number, count: number) => {
+      const [row] = await client
+        .update(userCards)
+        .set({ count: sql`${userCards.count} - ${count}` })
+        .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId), gte(userCards.count, count)))
+        .returning();
+      if (!row) throw new InsufficientCardError(userId, cardId);
+      if (row.count === 0) {
+        await client.delete(userCards).where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+        return;
+      }
+      const threshold = thresholdByCardId.get(cardId) ?? 0;
+      if (row.count < threshold) {
+        await client
+          .update(userCards)
+          .set({ customEmoji: null, customMediaUrl: null, customMediaType: null })
+          .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+      }
+    };
+
+    const crossings: { userId: number; cardId: number; previousCount: number; newCount: number; completedSubcategories?: CompletedSubcategory[] }[] = [];
+
+    const incrementCard = async (userId: number, cardId: number, count: number) => {
+      const existing = await client
+        .select()
+        .from(userCards)
+        .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)))
+        .limit(1)
+        .then(a => a?.[0]);
+
+      const previousCount = existing?.count ?? 0;
+      if (existing) {
+        await client
+          .update(userCards)
+          .set({ count: sql`${userCards.count} + ${count}` })
+          .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+      } else {
+        await client.insert(userCards).values({ userId, cardId, count });
+      }
+
+      const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
+      crossings.push({ userId, cardId, previousCount, newCount: previousCount + count, completedSubcategories });
+    };
+
+    for (const { cardId, count } of cardOfferA) await decrementCard(userAId, cardId, count);
+    for (const { cardId, count } of cardOfferB) await decrementCard(userBId, cardId, count);
+    for (const { entryId, count } of discoOfferA) await DiscotecaDB.decrementForTradeWithClient(client, userAId, entryId, count);
+    for (const { entryId, count } of discoOfferB) await DiscotecaDB.decrementForTradeWithClient(client, userBId, entryId, count);
+
+    for (const { cardId, count } of cardOfferA) await incrementCard(userBId, cardId, count);
+    for (const { cardId, count } of cardOfferB) await incrementCard(userAId, cardId, count);
+    for (const { entryId, count } of discoOfferA) await DiscotecaDB.incrementWithClient(client, userBId, entryId, count);
+    for (const { entryId, count } of discoOfferB) await DiscotecaDB.incrementWithClient(client, userAId, entryId, count);
+
+    const trade = await client
+      .insert(trades)
+      .values({
+        user1Id: userAId,
+        user2Id: userBId,
+        cardsUser1: cardOfferA.flatMap(o => Array(o.count).fill(o.cardId)),
+        cardsUser2: cardOfferB.flatMap(o => Array(o.count).fill(o.cardId)),
+        discotecaUser1: discoOfferA.flatMap(o => Array(o.count).fill(o.entryId)),
+        discotecaUser2: discoOfferB.flatMap(o => Array(o.count).fill(o.entryId)),
       })
       .returning()
       .then(a => a?.[0]);
