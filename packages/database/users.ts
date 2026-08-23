@@ -5,7 +5,8 @@ import { auditLogs } from "./schemas/audit";
 import { EconomyDB } from "./economy";
 import { economy } from "./schemas/economy";
 import { maybeTransaction } from "./decorators";
-import { eq, sql, and, or, gte, ilike, desc } from "drizzle-orm";
+import type { DrizzleClient } from "./decorators";
+import { eq, sql, and, or, gte, ilike, desc, inArray } from "drizzle-orm";
 
 export type Platform = 'telegram' | 'discord' | 'none';
 
@@ -99,6 +100,16 @@ export class UsersDB {
       .where(and(eq(linkedAccounts.userId, userId), eq(linkedAccounts.platform, platform)))
       .limit(1)
       .then(rows => rows[0]?.platformId);
+  })
+
+  // Batched getPlatformIdForUser, for building mention() links without one query per user.
+  static getPlatformIdsForUsers = maybeTransaction('getPlatformIdsForUsers', async (client, userIds: number[], platform: Platform): Promise<Map<number, string>> => {
+    if (userIds.length === 0) return new Map();
+    const rows = await client
+      .select({ userId: linkedAccounts.userId, platformId: linkedAccounts.platformId })
+      .from(linkedAccounts)
+      .where(and(inArray(linkedAccounts.userId, userIds), eq(linkedAccounts.platform, platform)));
+    return new Map(rows.map(r => [r.userId, r.platformId]));
   })
 
   static getUserByUsername = maybeTransaction('getUserByUsername', async (client, username: string) => {
@@ -347,6 +358,16 @@ export class UsersDB {
     await client.update(economy).set({ treasuryBalance: sql`${economy.treasuryBalance} + ${price}` });
     return { ok: true };
   })
+
+  // AuditDB.revertDonation's penalty chain, step 2: take one available draw atomically.
+  static async tryConsumeDrawAsPenaltyWithClient(client: DrizzleClient, userId: number): Promise<boolean> {
+    const [row] = await client
+      .update(users)
+      .set({ usedDraws: sql`${users.usedDraws} + 1` })
+      .where(and(eq(users.id, userId), sql`${users.usedDraws} < ${users.maxDraws}`))
+      .returning();
+    return !!row;
+  }
 
   static giveTemporaryDraws = maybeTransaction('giveTemporaryDraws', async (client, userId: number, amount: number) => {
     return await client

@@ -15,4 +15,7 @@ export const auditLogs = pgTable("audit_logs", {
   action: text().notNull(),
   metadata: jsonb().notNull().default({}),
   createdAt: timestamp().notNull().defaultNow(),
+  // claim-lock for AuditDB.revertDonation - set atomically so a donation can't be reverted twice.
+  revertedAt: timestamp(),
+  revertedByAdminId: integer().references(() => users.id),
 });

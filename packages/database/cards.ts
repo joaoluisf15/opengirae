@@ -37,6 +37,15 @@ export interface CompletedSubcategory {
   coinsAwarded: number;
 }
 
+// AuditDB.revertDonation's penalty chain - see applyDonationRevertPenaltyWithClient.
+export const DONATION_REVERT_PENALTY_COINS = 1000;
+export type DonationRevertPenalty =
+  | { ok: true; penalty: 'card_returned' }
+  | { ok: true; penalty: 'draw_taken' }
+  | { ok: true; penalty: 'coins_taken'; amount: number }
+  | { ok: true; penalty: 'same_tier_card_taken'; takenCardId: number }
+  | { ok: false };
+
 // the rarity /hipoteca holds - shared by the command layer's getUserCardsByRarityName call and this file's own filter
 export const HIPOTECA_RARITY_NAME = 'Lendário';
 
@@ -789,6 +798,52 @@ export class CardsDB {
 
     return { trade, crossings };
   })
+
+  // Decrements one copy, deleting at 0 and clearing cativeiro customization below threshold - same shape as executeTrade's decrement(), standalone for AuditDB.revertDonation's one-card-at-a-time calls.
+  static async tryDecrementOneWithClient(client: DrizzleClient, userId: number, cardId: number): Promise<boolean> {
+    const [row] = await client
+      .update(userCards)
+      .set({ count: sql`${userCards.count} - 1` })
+      .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId), gte(userCards.count, 1)))
+      .returning();
+    if (!row) return false;
+
+    if (row.count === 0) {
+      await client.delete(userCards).where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+      return true;
+    }
+
+    const [rarityRow] = await client
+      .select({ cativeiroThreshold: rarities.cativeiroThreshold })
+      .from(cards)
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .where(eq(cards.id, cardId))
+      .limit(1);
+    if (rarityRow && row.count < rarityRow.cativeiroThreshold) {
+      await client
+        .update(userCards)
+        .set({ customEmoji: null, customMediaUrl: null, customMediaType: null })
+        .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+    }
+    return true;
+  }
+
+  static async getCardRarityIdWithClient(client: DrizzleClient, cardId: number): Promise<number | null> {
+    const [row] = await client.select({ rarityId: cards.rarityId }).from(cards).where(eq(cards.id, cardId)).limit(1);
+    return row?.rarityId ?? null;
+  }
+
+  // any card of rarityId userId owns - AuditDB.revertDonation's "same tier" fallback step.
+  static async findOwnedCardOfRarityWithClient(client: DrizzleClient, userId: number, rarityId: number): Promise<number | null> {
+    const [row] = await client
+      .select({ cardId: userCards.cardId })
+      .from(userCards)
+      .innerJoin(cards, eq(cards.id, userCards.cardId))
+      .where(and(eq(userCards.userId, userId), eq(cards.rarityId, rarityId), gte(userCards.count, 1)))
+      .orderBy(userCards.cardId)
+      .limit(1);
+    return row?.cardId ?? null;
+  }
 
   static getTradeStats = maybeTransaction('getTradeStats', async (client, userId: number) => {
     const [initiatedRow, receivedRow] = await Promise.all([

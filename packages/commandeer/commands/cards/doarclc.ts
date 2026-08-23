@@ -92,7 +92,7 @@ export default class DoarClcCommand extends Command {
       return
     }
 
-    await AuditDB.log(donor.id, 'card.doarclc', { recipientUserId: recipient.id, subcategoryId: args.subcategory.id, cardIds: offerA.map(o => o.cardId) })
+    await AuditDB.log(donor.id, 'card.doarclc', { recipientUserId: recipient.id, subcategoryId: args.subcategory.id, cards: offerA })
 
     const dm = buildCtx(platform, args.target, recipient.displayName, args.target)
     await reply(dm, `💱 ${mention(platform, ctx.message.author.id, donor.displayName)} te doou toda a coleção **${escapeMarkdown(args.subcategory.name)}** (**${totalQty}** carta(s))!\n\n${list}`)
