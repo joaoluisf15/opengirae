@@ -21,7 +21,7 @@ async function renderPage(rawArg: string, page: number, viewerTelegramId: string
   const advice = filterAdviceText(FILTERS, active, filteredTotal, 'cards')
   const cardLine = card
     ? (() => {
-      // see clc.ts's note - a card in an active /leiloar still counts as owned here.
+      // see clc.ts's note - a card in an active /leilao still counts as owned here.
       const totalCount = card.ownedCount + (card.inAuction ? 1 : 0)
       const badge = cativeiroEmoji(totalCount)
       const auctionMark = card.inAuction ? ` ${EMOJI.inAuction}` : ''

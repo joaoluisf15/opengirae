@@ -54,6 +54,24 @@ async function saveState(workflowID: string, state: TradeState) {
   await rawClient.set(stateKey(workflowID), JSON.stringify(state), { EX: LOCK_TTL_SECONDS })
 }
 
+const MUTATE_LOCK_TTL_MS = 3000
+const mutateLockKey = (workflowID: string) => `tradedisco:mutate:${workflowID}`
+
+// guards modifyTradeOffer/tradeReadyDisco's load->mutate->save against a lost update from two rapid clicks.
+async function withStateLock<T>(workflowID: string, fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if ((await rawClient.set(mutateLockKey(workflowID), '1', { NX: true, PX: MUTATE_LOCK_TTL_MS })) === 'OK') {
+      try {
+        return await fn()
+      } finally {
+        await rawClient.del(mutateLockKey(workflowID))
+      }
+    }
+    await new Promise(r => setTimeout(r, 50))
+  }
+  throw new Error('tradedisco: could not acquire state lock')
+}
+
 function groupMessageLink(chatId: string, messageId: string): string {
   const idNum = Number(chatId)
   if (isNaN(idNum)) return `https://t.me/${chatId.replace('@', '')}/${messageId}`
@@ -76,39 +94,45 @@ export async function getActiveTradeSide(telegramId: string): Promise<{ workflow
 export async function modifyTradeOffer(telegramId: string, platform: 'telegram' | 'discord', entryId: number, action: 'add' | 'remove'): Promise<string> {
   const active = await getActiveTradeSide(telegramId)
   if (!active) return 'Você não está em uma troca da Discoteca...'
-  const { workflowID, state, side } = active
+  const { workflowID, side } = active
 
   const clickerUser = await UsersDB.getUserByPlatformAccount(platform, telegramId)
   if (!clickerUser) return 'Erro ao processar.'
 
-  if (action === 'add') {
-    const owned = await DiscotecaDB.getUserDiscoteca(clickerUser.id, entryId)
-    const ownedCount = owned?.count ?? 0
-    if (ownedCount === 0) return 'Você não tem esse item...'
-    // enforced again at finalize - checked here too for a clear message instead of a late failure.
-    if (!(await DiscotecaDB.isEntryTradable(clickerUser.id, entryId))) return 'Esse item não está marcado como trocável. Use /trocodisco primeiro.'
+  return withStateLock(workflowID, async () => {
+    // re-read under the lock - the snapshot from getActiveTradeSide() above could be stale by now.
+    const state = await loadState(workflowID)
+    if (!state) return 'Você não está em uma troca da Discoteca...'
 
-    const alreadyInOffer = state.offers[side][entryId] ?? 0
-    if (alreadyInOffer >= ownedCount) {
-      const entry = await DiscotecaDB.getEntry(entryId)
-      return `Você não pode adicionar mais ${entry?.name ?? 'itens'} à troca - você já colocou todos os que tem! 😅`
+    if (action === 'add') {
+      const owned = await DiscotecaDB.getUserDiscoteca(clickerUser.id, entryId)
+      const ownedCount = owned?.count ?? 0
+      if (ownedCount === 0) return 'Você não tem esse item...'
+      // enforced again at finalize - checked here too for a clear message instead of a late failure.
+      if (!(await DiscotecaDB.isEntryTradable(clickerUser.id, entryId))) return 'Esse item não está marcado como trocável. Use /trocodisco primeiro.'
+
+      const alreadyInOffer = state.offers[side][entryId] ?? 0
+      if (alreadyInOffer >= ownedCount) {
+        const entry = await DiscotecaDB.getEntry(entryId)
+        return `Você não pode adicionar mais ${entry?.name ?? 'itens'} à troca - você já colocou todos os que tem! 😅`
+      }
+
+      const totalInOffer = Object.values(state.offers[side]).reduce((a, b) => a + b, 0)
+      if (totalInOffer >= MAX_ITEMS_PER_SIDE) return 'Você só pode trocar 3 itens de uma vez! 😅'
+
+      state.offers[side][entryId] = alreadyInOffer + 1
+      await saveState(workflowID, state)
+      await DBOS.send<NegotiationEvent>(workflowID, { type: 'stateChanged', clickerUserId: telegramId }, NEGOTIATION_TOPIC)
+      return 'Item adicionado.'
     }
 
-    const totalInOffer = Object.values(state.offers[side]).reduce((a, b) => a + b, 0)
-    if (totalInOffer >= MAX_ITEMS_PER_SIDE) return 'Você só pode trocar 3 itens de uma vez! 😅'
-
-    state.offers[side][entryId] = alreadyInOffer + 1
+    if (!state.offers[side][entryId]) return 'Esse item não está na troca! 😅'
+    if (state.offers[side][entryId] <= 1) delete state.offers[side][entryId]
+    else state.offers[side][entryId] -= 1
     await saveState(workflowID, state)
     await DBOS.send<NegotiationEvent>(workflowID, { type: 'stateChanged', clickerUserId: telegramId }, NEGOTIATION_TOPIC)
-    return 'Item adicionado.'
-  }
-
-  if (!state.offers[side][entryId]) return 'Esse item não está na troca! 😅'
-  if (state.offers[side][entryId] <= 1) delete state.offers[side][entryId]
-  else state.offers[side][entryId] -= 1
-  await saveState(workflowID, state)
-  await DBOS.send<NegotiationEvent>(workflowID, { type: 'stateChanged', clickerUserId: telegramId }, NEGOTIATION_TOPIC)
-  return 'Item removido.'
+    return 'Item removido.'
+  })
 }
 
 async function formatOffer(offer: Offer): Promise<string> {
@@ -429,12 +453,17 @@ export default class TradeDiscoCommand extends Command {
   static async tradeReadyDisco(_arg: string, clickerUserId: string): Promise<string> {
     const active = await getActiveTradeSide(clickerUserId)
     if (!active) return 'Você não está em uma troca da Discoteca...'
-    const { workflowID, state, side } = active
-    if (Object.keys(state.offers[side]).length === 0) return 'Você não adicionou nenhum item...'
+    const { workflowID, side } = active
 
-    state.ready[side] = true
-    await saveState(workflowID, state)
-    await DBOS.send<NegotiationEvent>(workflowID, { type: 'stateChanged', clickerUserId }, NEGOTIATION_TOPIC)
-    return 'Certo! Agora, aguarde o outro usuário ficar pronto.'
+    return withStateLock(workflowID, async () => {
+      const state = await loadState(workflowID)
+      if (!state) return 'Você não está em uma troca da Discoteca...'
+      if (Object.keys(state.offers[side]).length === 0) return 'Você não adicionou nenhum item...'
+
+      state.ready[side] = true
+      await saveState(workflowID, state)
+      await DBOS.send<NegotiationEvent>(workflowID, { type: 'stateChanged', clickerUserId }, NEGOTIATION_TOPIC)
+      return 'Certo! Agora, aguarde o outro usuário ficar pronto.'
+    })
   }
 }

@@ -43,7 +43,7 @@ export async function renderPage(rawArg: string, page: number, viewerTelegramId:
 
   const rows = slice.length > 0
     ? slice.map(c => {
-      // see CardsDB.getUserOwnedCards's note - a card in an active /leiloar still shows up here.
+      // see CardsDB.getUserOwnedCards's note - a card in an active /leilao still shows up here.
       const totalCount = c.ownedCount + (c.inAuction ? 1 : 0)
       const badge = cativeiroEmoji(totalCount)
       const auctionMark = c.inAuction ? ` ${EMOJI.inAuction}` : ''

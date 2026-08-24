@@ -23,7 +23,7 @@ export const rarities = pgTable("rarities", {
   // admin-configurable "own this many copies of one card" unlock for cativeiro customization
   cativeiroThreshold: integer().notNull().default(15),
 
-  // reference value (at economy.inflationRate = 1) used to price a /leiloar listing for this
+  // reference value (at economy.inflationRate = 1) used to price a /leilao listing for this
   // rarity - deliberately not admin-editable via its own UI/command, scales with inflationRate
   // instead. Seeded by migration, not this default - see AuctionsDB.
   auctionBaseValue: integer().notNull().default(0),
@@ -323,7 +323,7 @@ export const auctions = pgTable(
     // the real "one active auction per (seller, card)" guard - not an app-level pre-check
     uniqueIndex("auctions_active_seller_card_idx").on(table.sellerId, table.cardId).where(sql`${table.status} = 'active'`),
     index("auctions_status_expires_idx").on(table.status, table.expiresAt),
-    // /leiloar's 3-per-day limit and the 6h re-list cooldown both scan by (sellerId, createdAt)/(sellerId, cardId, resolvedAt)
+    // /leilao's 3-per-day limit and the 6h re-list cooldown both scan by (sellerId, createdAt)/(sellerId, cardId, resolvedAt)
     index("auctions_seller_created_idx").on(table.sellerId, table.createdAt),
   ],
 );
@@ -341,6 +341,8 @@ export const auctionBids = pgTable(
   },
   (table) => [
     index("auction_bids_auction_idx").on(table.auctionId),
+    // used by the site's "a licitar" (bids by this user) listing.
+    index("auction_bids_bidder_idx").on(table.bidderId),
   ],
 );
 

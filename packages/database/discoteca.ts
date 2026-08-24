@@ -358,6 +358,11 @@ export class DiscotecaDB {
     return await client.select().from(discotecaArtists).where(eq(discotecaArtists.id, id)).limit(1).then(a => a?.[0]);
   })
 
+  static getArtistsByIds = maybeTransaction('getArtistsByIds', async (client, ids: number[]) => {
+    if (ids.length === 0) return [];
+    return await client.select().from(discotecaArtists).where(inArray(discotecaArtists.id, ids));
+  })
+
   static getArtistByCardId = maybeTransaction('getArtistByCardId', async (client, cardId: number) => {
     return await client.select().from(discotecaArtists).where(eq(discotecaArtists.cardId, cardId)).limit(1).then(a => a?.[0]);
   })

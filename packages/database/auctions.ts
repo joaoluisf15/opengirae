@@ -3,7 +3,7 @@ import { db } from "./index";
 import { auctions, auctionBids, cards, rarities, userCards, cardSubcategories, subcategories, categories } from "./schemas/cards";
 import { economy } from "./schemas/economy";
 import { users } from "./schemas/users";
-import { eq, and, or, sql, gte, lte, inArray, ilike, desc, asc } from "drizzle-orm";
+import { eq, and, or, sql, gte, lte, inArray, ilike, desc, asc, isNull } from "drizzle-orm";
 import { EconomyDB } from "./economy";
 
 export type Auction = typeof auctions.$inferSelect;
@@ -290,15 +290,14 @@ export class AuctionsDB {
     const state = await client.select().from(economy).limit(1).then(r => r[0]!);
     if (!state.auctionsEnabled) throw new AuctionCreateError('auctions_disabled');
 
-    // TEMP: daily-limit check disabled for testing - restore before shipping.
-    // const startOfToday = new Date();
-    // startOfToday.setHours(0, 0, 0, 0);
-    // const createdToday = await client
-    //   .select({ count: sql<number>`count(*)::int` })
-    //   .from(auctions)
-    //   .where(and(eq(auctions.sellerId, sellerId), gte(auctions.createdAt, startOfToday)))
-    //   .then(r => r[0]?.count ?? 0);
-    // if (createdToday >= MAX_AUCTIONS_PER_DAY) throw new AuctionCreateError('daily_limit');
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const createdToday = await client
+      .select({ count: sql<number>`count(*)::int` })
+      .from(auctions)
+      .where(and(eq(auctions.sellerId, sellerId), gte(auctions.createdAt, startOfToday)))
+      .then(r => r[0]?.count ?? 0);
+    if (createdToday >= MAX_AUCTIONS_PER_DAY) throw new AuctionCreateError('daily_limit');
 
     const cardRow = await client
       .select({ auctionBaseValue: rarities.auctionBaseValue, cativeiroThreshold: rarities.cativeiroThreshold })
@@ -522,34 +521,35 @@ export class AuctionsDB {
   })
 
   // notification outboxes, drained by CronJobs.runAuctionSweep (packages/database has no messaging access).
+  // Mark-after-send (not mark-then-send): a crash mid-send re-reads the same unmarked rows on replay instead of losing them.
 
   // a bid row counts as "outbid" once a later bid from a *different* bidder exists AND it's that bidder's own latest row - the second condition avoids double-notifying a bidder's self-superseded rows after a confirmed self-rebid.
-  static claimOutbidNotifications = async (limit = 50) => {
-    const result = await db.execute<{ id: number; auctionId: number; bidderId: number; amount: number }>(sql`
-      UPDATE ${auctionBids} SET "notifiedAt" = now()
-      WHERE id IN (
-        SELECT b.id FROM ${auctionBids} b
-        WHERE b."notifiedAt" IS NULL
-          AND EXISTS (SELECT 1 FROM ${auctionBids} b2 WHERE b2."auctionId" = b."auctionId" AND b2.id > b.id AND b2."bidderId" != b."bidderId")
-          AND NOT EXISTS (SELECT 1 FROM ${auctionBids} b3 WHERE b3."auctionId" = b."auctionId" AND b3."bidderId" = b."bidderId" AND b3.id > b.id)
-        ORDER BY b.id
-        LIMIT ${limit}
-      )
-      RETURNING id, "auctionId", "bidderId", "amount"
+  static listUnnotifiedBids = maybeTransaction('listUnnotifiedBids', async (client, limit = 50) => {
+    const result = await client.execute<{ id: number; auctionId: number; bidderId: number; amount: number }>(sql`
+      SELECT b.id, b."auctionId", b."bidderId", b."amount" FROM ${auctionBids} b
+      WHERE b."notifiedAt" IS NULL
+        AND EXISTS (SELECT 1 FROM ${auctionBids} b2 WHERE b2."auctionId" = b."auctionId" AND b2.id > b.id AND b2."bidderId" != b."bidderId")
+        AND NOT EXISTS (SELECT 1 FROM ${auctionBids} b3 WHERE b3."auctionId" = b."auctionId" AND b3."bidderId" = b."bidderId" AND b3.id > b.id)
+      ORDER BY b.id
+      LIMIT ${limit}
     `);
     return result.rows;
-  }
+  })
 
-  static claimResolutionNotifications = async (limit = 50) => {
-    return await db.execute<Auction>(sql`
-      UPDATE ${auctions} SET "resolutionNotifiedAt" = now()
-      WHERE id IN (
-        SELECT id FROM ${auctions}
-        WHERE "resolutionNotifiedAt" IS NULL AND status != 'active'
-        ORDER BY id
-        LIMIT ${limit}
-      )
-      RETURNING *
-    `).then(r => r.rows);
-  }
+  static markBidNotified = maybeTransaction('markBidNotified', async (client, id: number) => {
+    await client.update(auctionBids).set({ notifiedAt: sql`now()` }).where(eq(auctionBids.id, id));
+  })
+
+  static listUnnotifiedResolutions = maybeTransaction('listUnnotifiedResolutions', async (client, limit = 50) => {
+    return await client
+      .select()
+      .from(auctions)
+      .where(and(isNull(auctions.resolutionNotifiedAt), sql`${auctions.status} != 'active'`))
+      .orderBy(asc(auctions.id))
+      .limit(limit);
+  })
+
+  static markResolutionNotified = maybeTransaction('markResolutionNotified', async (client, id: number) => {
+    await client.update(auctions).set({ resolutionNotifiedAt: sql`now()` }).where(eq(auctions.id, id));
+  })
 }

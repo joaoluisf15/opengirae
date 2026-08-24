@@ -23,8 +23,8 @@ async function displayNameFor(userId: number): Promise<string> {
 
 // drains the outbid-notification outbox (auctionBids.notifiedAt) - a bid can be triggered from the website's tRPC layer, which has no messaging access, so this can't be inline in placeBid.
 export async function sendOutbidNotifications(limit = 50): Promise<void> {
-  const claimed = await AuctionsDB.claimOutbidNotifications(limit)
-  for (const bid of claimed) {
+  const pending = await AuctionsDB.listUnnotifiedBids(limit)
+  for (const bid of pending) {
     const auctionDetails = await AuctionsDB.getAuction(bid.auctionId)
     if (!auctionDetails) continue
     const displayName = await displayNameFor(bid.bidderId)
@@ -39,6 +39,7 @@ export async function sendOutbidNotifications(limit = 50): Promise<void> {
         `📈 **Lance atual:** **${auctionDetails.auction.currentBid} moedas**`,
       ].join('\n'),
     )
+    await AuctionsDB.markBidNotified(bid.id)
   }
 }
 
@@ -100,10 +101,11 @@ async function describeResolution(auction: Auction, cardName: string, rarityEmoj
 
 // drains the sold/expired/cancelled notification outbox (auctions.resolutionNotifiedAt) - same reasoning as sendOutbidNotifications.
 export async function sendResolutionNotifications(limit = 50): Promise<void> {
-  const claimed = await AuctionsDB.claimResolutionNotifications(limit)
-  for (const auction of claimed) {
+  const pending = await AuctionsDB.listUnnotifiedResolutions(limit)
+  for (const auction of pending) {
     const card = await CardsDB.getCardWithDetails(auction.cardId)
     if (!card) continue
     await describeResolution(auction, card.name, card.rarityEmoji)
+    await AuctionsDB.markResolutionNotified(auction.id)
   }
 }

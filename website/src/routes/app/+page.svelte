@@ -18,7 +18,7 @@
 
 	let idParam = $derived(page.url.searchParams.get('id'));
 	let viewingUserId = $derived(idParam && /^\d+$/.test(idParam) ? parseInt(idParam, 10) : undefined);
-	// the /leiloar bot command's mini app link reuses the same startapp -> ?id param plumbing,
+	// the /leilao bot command's mini app link reuses the same startapp -> ?id param plumbing,
 	// but for the "leilao" tab it means "open this auction", not "view this user's cards".
 	let initialAuctionId = $derived(idParam && /^\d+$/.test(idParam) ? parseInt(idParam, 10) : undefined);
 </script>

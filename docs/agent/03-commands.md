@@ -323,10 +323,10 @@ instead of trusting a diff by eye.
       `let threw: unknown; try { await p } catch (e) { threw = e }` then
       `expect(threw).toBeInstanceOf(SomeError)` — instead of
       `expect(promise).rejects.toBeInstanceOf(SomeError)`/`.rejects.toThrow(...)`.
-    This cost real debugging time on the `/leiloar`/`/lance` tests (the
-    `.resolves` case) and again on the Discoteca trade tests (the `.rejects`
-    case) before the pattern itself was found to be the cause, not the
-    code under test.
+    This cost real debugging time on the `/leiloar`/`/lance` tests (now
+    unified into `/leilao`, `tests/leilao/leilao.test.ts`; the `.resolves`
+    case) and again on the Discoteca trade tests (the `.rejects` case) before
+    the pattern itself was found to be the cause, not the code under test.
   - **Never `mock.module()` a shared module** (like
     `@girae/common/dbos/messaging`) at the top of a test file expecting an
     `afterAll` to cleanly restore it — `bun test` shares one module registry

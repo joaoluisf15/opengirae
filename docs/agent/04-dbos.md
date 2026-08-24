@@ -70,15 +70,26 @@ with multiple replicas).
   ])
   ```
   `runAuctionSweep` is the once-a-minute example of the fastest cadence in the system so far —
-  settles expired `/leiloar` auctions (`AuctionsDB.sweepExpiredAuctions`) and drains two
+  settles expired `/leilao` auctions (`AuctionsDB.sweepExpiredAuctions`) and drains two
   notification outboxes (`services/auctions/notifications.ts`'s `sendOutbidNotifications`/
   `sendResolutionNotifications`). The outbox pattern itself is worth knowing about for any future
   feature the **website** can trigger: `@girae/database` has no messaging access (see
   `02-architecture.md`), so a DB write that needs to notify someone can't just call `reply()`
   inline — it may be running inside a tRPC mutation, not commandeer. Instead the write stamps a
   `notifiedAt IS NULL` column (`auctionBids.notifiedAt`, `auctions.resolutionNotifiedAt`), and a
-  cron tick claims (`UPDATE ... WHERE notifiedAt IS NULL RETURNING *`, same claim-then-act shape
-  as everything else here) and sends from inside commandeer, which does have messaging access.
+  cron tick reads the unnotified rows (`AuctionsDB.listUnnotifiedBids`/`listUnnotifiedResolutions`,
+  a plain `SELECT ... WHERE notifiedAt IS NULL`), sends from inside commandeer (which does have
+  messaging access), and only *then* marks each row notified (`markBidNotified`/
+  `markResolutionNotified`) — send-then-mark, not the more obvious claim-then-send. This is
+  deliberate: both the read and the mark are `maybeTransaction`-wrapped, so inside
+  `runAuctionSweep`'s workflow they're real DBOS steps — a crash between sending and marking
+  replays correctly (the already-sent DM's `reply()` step is skipped on replay, and marking just
+  runs). A claim-first `UPDATE ... RETURNING` (the previous shape here) doesn't have this property
+  when the claim itself isn't step-wrapped: a crash between claiming and sending permanently
+  orphans the row, since a replay's fresh claim query no longer matches it. The tradeoff is that
+  send-then-mark drops the old claim's protection against two overlapping sweep ticks both
+  processing the same row — accepted here since ticks are fast/infrequent and an occasional
+  duplicate DM is far less bad than a silently lost one.
   `schedule` is a standard 5-field cron string, evaluated in the server's
   timezone (the existing jobs assume UTC — `runMidnightReset` fires at 3:00
   UTC, matching `/daily`'s own `getTimeUntilMidnight()` cutoff, not literal

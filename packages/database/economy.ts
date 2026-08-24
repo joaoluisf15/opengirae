@@ -64,7 +64,7 @@ export class EconomyDB {
     return await client.update(economy).set({ auctionSaleFeeRate: rate, updatedAt: new Date() }).returning().then(rows => rows[0]);
   })
 
-  // /leiloar emergency kill-switch - see AuctionsDB.createAuction/placeBid
+  // /leilao emergency kill-switch - see AuctionsDB.createAuction/placeBid
   static setAuctionsEnabled = maybeTransaction('setAuctionsEnabled', async (client, enabled: boolean) => {
     return await client.update(economy).set({ auctionsEnabled: enabled, updatedAt: new Date() }).returning().then(rows => rows[0]);
   })

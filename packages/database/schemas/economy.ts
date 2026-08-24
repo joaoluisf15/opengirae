@@ -9,7 +9,7 @@ export const economy = pgTable("economy", {
   // watermark: treasuryBalance as of the last allocation sync - see EconomyDB.syncAllocations
   lastSyncedTreasuryBalance: bigint({ mode: 'number' }).notNull().default(0),
 
-  // /leiloar sale commission, charged at settlement not at listing time (0.10 = 10%)
+  // /leilao sale commission, charged at settlement not at listing time (0.10 = 10%)
   auctionSaleFeeRate: doublePrecision().notNull().default(0.10),
   // emergency kill-switch: createAuction/placeBid refuse immediately when false, no deploy needed
   auctionsEnabled: boolean().notNull().default(true),

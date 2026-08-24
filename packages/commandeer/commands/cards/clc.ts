@@ -20,7 +20,7 @@ async function renderPage(rawArg: string, page: number, viewerTelegramId: string
 
   const rows = pageRows.length > 0
     ? pageRows.map(c => {
-      // a card the user currently has in an active /leiloar still counts as owned (stats-wise)
+      // a card the user currently has in an active /leilao still counts as owned (stats-wise)
       // even though its stock is temporarily out of userCards - see CardsDB.getSubcategoryStats/
       // getCardsInSubcategoryForUserFiltered. Count the auctioned unit back in and mark it with
       // EMOJI.inAuction in the trailing slot instead of falling back to the "not owned"

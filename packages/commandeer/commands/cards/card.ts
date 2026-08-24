@@ -43,7 +43,7 @@ async function showCard(ctx: IncomingCommand, card: CardDetails) {
     CardsDB.getSecondarySubcategoryNames(card.id),
     user ? AuctionsDB.getActiveAuctionForSellerCard(user.id, card.id) : null,
   ])
-  // a unit currently in this user's own /leiloar is physically out of userCards (see
+  // a unit currently in this user's own /leilao is physically out of userCards (see
   // AuctionsDB.createAuctionTx) but still theirs - count it back in instead of showing 0x.
   const inAuction = !!activeAuction
   const count = (owned?.count ?? 0) + (inAuction ? 1 : 0)

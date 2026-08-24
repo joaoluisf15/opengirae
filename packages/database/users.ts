@@ -78,6 +78,11 @@ export class UsersDB {
     return await client.select().from(users).where(eq(users.id, id)).limit(1).then(a => a?.[0]);
   })
 
+  static getUsersByIds = maybeTransaction('getUsersByIds', async (client, ids: number[]) => {
+    if (ids.length === 0) return [];
+    return await client.select().from(users).where(inArray(users.id, ids));
+  })
+
   static isViewable(viewerId: number, target: { id: number; privacyMode: boolean }): boolean {
     return target.id === viewerId || !target.privacyMode
   }

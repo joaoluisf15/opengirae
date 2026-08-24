@@ -153,12 +153,10 @@
 		}
 	}
 
-	// --- /leiloar sale fee + kill switch ---
+	// --- /leilao sale fee (kill switch lives on the Configurações page, alongside Discoteca's) ---
 
 	let saleFeePercent = $state(String(data.state.auctionSaleFeeRate * 100));
 	let savingAuctionFee = $state(false);
-	let auctionsEnabled = $state(data.state.auctionsEnabled);
-	let togglingAuctions = $state(false);
 
 	async function saveAuctionFee() {
 		const percent = Number(saleFeePercent);
@@ -175,19 +173,6 @@
 			toast.error('Falha ao atualizar a taxa de venda do leilão');
 		} finally {
 			savingAuctionFee = false;
-		}
-	}
-
-	async function toggleAuctionsEnabled() {
-		togglingAuctions = true;
-		try {
-			const updated = await trpc().economy.setAuctionsEnabled.mutate({ enabled: !auctionsEnabled });
-			auctionsEnabled = updated.auctionsEnabled;
-			toast.success(auctionsEnabled ? 'Leilões ativados' : 'Leilões desativados');
-		} catch {
-			toast.error('Falha ao mudar o estado dos leilões');
-		} finally {
-			togglingAuctions = false;
 		}
 	}
 </script>
@@ -306,15 +291,7 @@
 </div>
 
 <div class="border-line bg-panel mt-6 max-w-3xl rounded-xl border p-5">
-	<div class="mb-3 flex items-center justify-between">
-		<h2 class="text-ink text-sm font-semibold">Leilões (/leiloar)</h2>
-		<button class="btn {auctionsEnabled ? 'btn-ghost text-red-500' : 'btn-default'}" disabled={togglingAuctions} onclick={toggleAuctionsEnabled}>
-			{auctionsEnabled ? 'Desativar leilões' : 'Ativar leilões'}
-		</button>
-	</div>
-	<p class="text-ink-dim mb-4 text-xs">
-		Interruptor de emergência - desativar bloqueia leilões e lances novos na hora, sem precisar de deploy. Leilões já a decorrer continuam a fechar normalmente.
-	</p>
+	<h2 class="text-ink mb-3 text-sm font-semibold">Leilões (/leilao)</h2>
 	<label class="text-ink-dim text-xs" for="saleFee">
 		Taxa de venda (cobrada do vendedor sobre o valor recebido, só quando o leilão vende - criar um leilão é grátis)
 		<div class="relative mt-1 w-24">

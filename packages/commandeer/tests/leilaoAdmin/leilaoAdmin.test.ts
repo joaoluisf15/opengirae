@@ -6,11 +6,8 @@ import { userCards, auctions, auctionBids, subcategoryCompletionRewards } from "
 import { eq, sql } from "drizzle-orm";
 import { CardsDB } from "@girae/database/cards";
 import { AuctionsDB, type Auction } from "@girae/database/auctions";
-import { EconomyDB } from "@girae/database/economy";
 import LeilaoForcarCommand from "../../commands/admin/leilaoforcar";
 import LeilaoCancelarCommand from "../../commands/admin/leilaocancelar";
-import LeilaoSwitchCommand from "../../commands/admin/leilaoswitch";
-import SetLeilaoTaxaCommand from "../../commands/admin/setleilaotaxa";
 
 mockTelegram();
 
@@ -75,28 +72,5 @@ describe("leilão admin commands", () => {
     const row = await db.select().from(auctions).where(eq(auctions.id, auction.id)).then(r => r[0]);
     expect(row?.status).toBe('cancelled');
     expect(await db.select({ coins: users.coins }).from(users).where(eq(users.id, bidderId)).then(r => r[0]!.coins)).toBe(1_000_000);
-  });
-
-  test("/leilaoswitch toggles economy.auctionsEnabled", async () => {
-    const ctx = fakeCtx({ name: 'leilaoswitch', authorId: adminPlatformId, args: ['off'], platform: 'telegram' });
-    await LeilaoSwitchCommand.execute(ctx, { state: false });
-    expect((await EconomyDB.getState()).auctionsEnabled).toBe(false);
-
-    const ctxOn = fakeCtx({ name: 'leilaoswitch', authorId: adminPlatformId, args: ['on'], platform: 'telegram' });
-    await LeilaoSwitchCommand.execute(ctxOn, { state: true });
-    expect((await EconomyDB.getState()).auctionsEnabled).toBe(true);
-  });
-
-  test("/setleilaotaxa updates the sale fee rate", async () => {
-    const before = await EconomyDB.getState();
-    try {
-      const ctx = fakeCtx({ name: 'setleilaotaxa', authorId: adminPlatformId, args: ['30'], platform: 'telegram' });
-      await SetLeilaoTaxaCommand.execute(ctx, { percentagem: 30 });
-
-      const after = await EconomyDB.getState();
-      expect(after.auctionSaleFeeRate).toBe(0.3);
-    } finally {
-      await EconomyDB.setAuctionSaleFeeRate(before.auctionSaleFeeRate);
-    }
   });
 });

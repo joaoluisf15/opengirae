@@ -102,15 +102,15 @@ export class AuditDB {
     const subcategoryIds = [...new Set(metas.map(m => m.subcategoryId).filter((id): id is number => id !== undefined))];
 
     const [users, platformIdById, cardDetails, subcats] = await Promise.all([
-      Promise.all([...otherUserIds].map(id => UsersDB.getUserById(id))),
+      UsersDB.getUsersByIds([...otherUserIds]),
       opts.platform ? UsersDB.getPlatformIdsForUsers([...otherUserIds], opts.platform) : Promise.resolve(new Map<number, string>()),
       CardsDB.getCardsWithDetailsByIds(cardIds),
-      Promise.all(subcategoryIds.map(id => CardsDB.getSubcategory(id))),
+      CardsDB.getSubcategoriesByIds(subcategoryIds),
     ]);
 
-    const nameById = new Map(users.filter(u => u !== undefined).map(u => [u.id, u.displayName]));
+    const nameById = new Map(users.map(u => [u.id, u.displayName]));
     const cardById = new Map(cardDetails.map(c => [c.id, c]));
-    const subcategoryNameById = new Map(subcats.filter(s => s !== undefined).map(s => [s.id, s.name]));
+    const subcategoryNameById = new Map(subcats.map(s => [s.id, s.name]));
 
     const enriched = rows.map((row, i) => {
       const meta = metas[i]!;
@@ -252,15 +252,15 @@ export class AuditDB {
     const artistIds = [...new Set(metas.map(m => m.artistId).filter((id): id is number => id !== undefined))];
 
     const [users, platformIdById, entryDetails, artists] = await Promise.all([
-      Promise.all([...otherUserIds].map(id => UsersDB.getUserById(id))),
+      UsersDB.getUsersByIds([...otherUserIds]),
       opts.platform ? UsersDB.getPlatformIdsForUsers([...otherUserIds], opts.platform) : Promise.resolve(new Map<number, string>()),
       DiscotecaDB.getEntriesByIds(entryIds),
-      Promise.all(artistIds.map(id => DiscotecaDB.getArtist(id))),
+      DiscotecaDB.getArtistsByIds(artistIds),
     ]);
 
-    const nameById = new Map(users.filter(u => u !== undefined).map(u => [u.id, u.displayName]));
+    const nameById = new Map(users.map(u => [u.id, u.displayName]));
     const entryById = new Map(entryDetails.map(e => [e.id, e]));
-    const artistNameById = new Map(artists.filter(a => a !== undefined).map(a => [a.id, a.name]));
+    const artistNameById = new Map(artists.map(a => [a.id, a.name]));
 
     const enriched = rows.map((row, i) => {
       const meta = metas[i]!;

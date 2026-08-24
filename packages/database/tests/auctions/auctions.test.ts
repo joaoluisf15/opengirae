@@ -166,8 +166,7 @@ describe("AuctionsDB", () => {
       expect(await getOwnedCount(sellerId, cardId)).toBe(1);
     });
 
-    // TEMP: daily-limit check disabled for testing in AuctionsDB.createAuctionTx - re-enable together.
-    test.skip("daily limit of 3 is enforced per seller", async () => {
+    test("daily limit of 3 is enforced per seller", async () => {
       const sellerId = await freshSeller();
 
       for (let i = 0; i < 3; i++) {
@@ -581,7 +580,7 @@ describe("AuctionsDB", () => {
       return result.auction;
     }
 
-    test("claimOutbidNotifications only returns bids that were later superseded, once each", async () => {
+    test("listUnnotifiedBids only returns bids that were later superseded, once each, until marked notified", async () => {
       const auction = await freshAuction("Test Leilao Outbox Outbid");
       const bidderA = await freshSeller();
       const bidderB = await freshSeller();
@@ -589,13 +588,18 @@ describe("AuctionsDB", () => {
       await AuctionsDB.placeBid(auction.id, bidderA, auction.startingBid);
       await AuctionsDB.placeBid(auction.id, bidderB, auction.startingBid + auction.bidIncrement);
 
-      const claimed = await AuctionsDB.claimOutbidNotifications(100);
-      const forThisAuction = claimed.filter(c => c.auctionId === auction.id);
+      const pending = await AuctionsDB.listUnnotifiedBids(100);
+      const forThisAuction = pending.filter(c => c.auctionId === auction.id);
       expect(forThisAuction).toHaveLength(1);
       expect(forThisAuction[0]!.bidderId).toBe(bidderA); // B is still current, not outbid
 
-      const claimedAgain = await AuctionsDB.claimOutbidNotifications(100);
-      expect(claimedAgain.filter(c => c.auctionId === auction.id)).toHaveLength(0);
+      // not marked yet - still shows up (mark-after-send, not claim-then-send)
+      const stillPending = await AuctionsDB.listUnnotifiedBids(100);
+      expect(stillPending.filter(c => c.auctionId === auction.id)).toHaveLength(1);
+
+      await AuctionsDB.markBidNotified(forThisAuction[0]!.id);
+      const afterMarking = await AuctionsDB.listUnnotifiedBids(100);
+      expect(afterMarking.filter(c => c.auctionId === auction.id)).toHaveLength(0);
     });
 
     test("a confirmed self-rebid doesn't notify the bidder as outbid by themselves, and later being genuinely outbid notifies once, not twice", async () => {
@@ -608,28 +612,29 @@ describe("AuctionsDB", () => {
       await AuctionsDB.placeBid(auction.id, bidderA, auction.startingBid + auction.bidIncrement, { allowSelfRebid: true });
 
       // A's own rebid superseding their own earlier bid shouldn't queue a notification
-      const afterSelfRebid = await AuctionsDB.claimOutbidNotifications(100);
+      const afterSelfRebid = await AuctionsDB.listUnnotifiedBids(100);
       expect(afterSelfRebid.filter(c => c.auctionId === auction.id)).toHaveLength(0);
 
       await AuctionsDB.placeBid(auction.id, bidderB, auction.startingBid + auction.bidIncrement * 2);
 
       // now A is genuinely outbid by B - exactly one notification, not one per historical A row
-      const afterRealOutbid = await AuctionsDB.claimOutbidNotifications(100);
+      const afterRealOutbid = await AuctionsDB.listUnnotifiedBids(100);
       const forThisAuction = afterRealOutbid.filter(c => c.auctionId === auction.id);
       expect(forThisAuction).toHaveLength(1);
       expect(forThisAuction[0]!.bidderId).toBe(bidderA);
       expect(forThisAuction[0]!.amount).toBe(auction.startingBid + auction.bidIncrement);
     });
 
-    test("claimResolutionNotifications returns a resolved auction once", async () => {
+    test("listUnnotifiedResolutions returns a resolved auction until marked notified", async () => {
       const auction = await freshAuction("Test Leilao Outbox Resolution");
       await AuctionsDB.forceCloseAuction(auction.id);
 
-      const claimed = await AuctionsDB.claimResolutionNotifications(100);
-      expect(claimed.some(a => a.id === auction.id)).toBe(true);
+      const pending = await AuctionsDB.listUnnotifiedResolutions(100);
+      expect(pending.some(a => a.id === auction.id)).toBe(true);
 
-      const claimedAgain = await AuctionsDB.claimResolutionNotifications(100);
-      expect(claimedAgain.some(a => a.id === auction.id)).toBe(false);
+      await AuctionsDB.markResolutionNotified(auction.id);
+      const afterMarking = await AuctionsDB.listUnnotifiedResolutions(100);
+      expect(afterMarking.some(a => a.id === auction.id)).toBe(false);
     });
   });
 
