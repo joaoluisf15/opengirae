@@ -58,7 +58,7 @@ describe("CardsDB.getUserOwnedCardsBySubcategory", () => {
     await fx.ownCard(userId, cardId, 1);
     await CardsDB.setCardTradable(userId, cardId, true);
     await db.update(users).set({ coins: 1_000_000 }).where(eq(users.id, userId));
-    const created = await AuctionsDB.createAuction(userId, cardId, false);
+    const created = await AuctionsDB.createAuction(userId, cardId);
     if (!created.ok) throw new Error(`fixture setup failed: ${created.reason}`);
     fx.onCleanup(async () => { await db.delete(auctions).where(eq(auctions.id, created.auction.id)); });
 
@@ -83,7 +83,7 @@ describe("CardsDB.getUserOwnedCardsBySubcategory", () => {
     await fx.ownCard(userId, cardId, 3);
     await CardsDB.setCardTradable(userId, cardId, true);
     await db.update(users).set({ coins: 1_000_000 }).where(eq(users.id, userId));
-    const created = await AuctionsDB.createAuction(userId, cardId, false);
+    const created = await AuctionsDB.createAuction(userId, cardId);
     if (!created.ok) throw new Error(`fixture setup failed: ${created.reason}`);
     fx.onCleanup(async () => { await db.delete(auctions).where(eq(auctions.id, created.auction.id)); });
 

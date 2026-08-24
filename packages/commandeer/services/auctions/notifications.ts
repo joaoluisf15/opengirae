@@ -47,10 +47,11 @@ async function describeResolution(auction: Auction, cardName: string, rarityEmoj
   const escapedCardName = escapeMarkdown(cardName)
 
   if (auction.status === 'sold') {
+    const feeLine = auction.saleFeePaid ? `\n💸 Taxa de venda: **${auction.saleFeePaid} moedas**\n💰 Você recebeu: **${auction.currentBid! - auction.saleFeePaid} moedas**` : ''
     await dmUser(auction.sellerId, sellerName, [
       '🎉 **Item Vendido!**',
       '',
-      `🔨 O seu leilão \`${auction.id}\` (${rarityEmoji} **${escapedCardName}**) foi arrematado por **${auction.currentBid} moedas**`,
+      `🔨 O seu leilão \`${auction.id}\` (${rarityEmoji} **${escapedCardName}**) foi arrematado por **${auction.currentBid} moedas**${feeLine}`,
     ].join('\n'))
     if (auction.currentBidderId !== null) {
       const winnerName = await displayNameFor(auction.currentBidderId)
@@ -66,14 +67,13 @@ async function describeResolution(auction: Auction, cardName: string, rarityEmoj
   }
 
   if (auction.status === 'expired') {
-    const insuranceNote = auction.insured ? '\n\n🛡️ Como você tinha o seguro, parte da taxa de publicação e do valor base do card já foi devolvida.' : ''
     await dmUser(auction.sellerId, sellerName, [
       '⌛️ **Leilão Encerrado!**',
       '',
       `O leilão \`${auction.id}\` (${rarityEmoji} **${escapedCardName}**) fechou sem nenhum lance.`,
       '',
       '📦 O card já voltou para a sua coleção!',
-    ].join('\n') + insuranceNote)
+    ].join('\n'))
     return
   }
 

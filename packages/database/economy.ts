@@ -53,22 +53,15 @@ export class EconomyDB {
     return true;
   }
 
-  // mirror of deductCoinsToTreasury, for undoing a previous deduction (e.g. a /leiloar listing-fee
-  // refund) - keeps treasuryBalance/treasuryContributed symmetric instead of overstating what the
-  // treasury actually kept. Same "takes the caller's own open transaction client" shape.
-  static refundCoinsFromTreasury = async (client: DrizzleClient, userId: number, amount: number): Promise<void> => {
-    await client.update(users).set({ coins: sql`${users.coins} + ${amount}` }).where(eq(users.id, userId));
-    await client.update(economy).set({ treasuryBalance: sql`${economy.treasuryBalance} - ${amount}` });
-    await client.update(users).set({ treasuryContributed: sql`${users.treasuryContributed} - ${amount}` }).where(eq(users.id, userId));
+  // unlike deductCoinsToTreasury, nothing is deducted from the seller - the fee is already withheld from the bid before payout.
+  static chargeAuctionSaleFee = async (client: DrizzleClient, sellerId: number, feeAmount: number): Promise<void> => {
+    if (feeAmount <= 0) return;
+    await client.update(economy).set({ treasuryBalance: sql`${economy.treasuryBalance} + ${feeAmount}` });
+    await client.update(users).set({ treasuryContributed: sql`${users.treasuryContributed} + ${feeAmount}` }).where(eq(users.id, sellerId));
   }
 
-  // /leiloar's two fee multipliers, "1 = 100%" same convention as inflationRate - edited together,
-  // partial updates keep whichever value isn't passed.
-  static setAuctionFees = maybeTransaction('setAuctionFees', async (client, listingMultiplier?: number, insuranceMultiplier?: number) => {
-    const set: Partial<typeof economy.$inferInsert> = { updatedAt: new Date() };
-    if (listingMultiplier !== undefined) set.auctionListingFeeMultiplier = listingMultiplier;
-    if (insuranceMultiplier !== undefined) set.auctionInsuranceFeeMultiplier = insuranceMultiplier;
-    return await client.update(economy).set(set).returning().then(rows => rows[0]);
+  static setAuctionSaleFeeRate = maybeTransaction('setAuctionSaleFeeRate', async (client, rate: number) => {
+    return await client.update(economy).set({ auctionSaleFeeRate: rate, updatedAt: new Date() }).returning().then(rows => rows[0]);
   })
 
   // /leiloar emergency kill-switch - see AuctionsDB.createAuction/placeBid

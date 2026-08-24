@@ -16,7 +16,6 @@ const OVERTIME_UNIT = 2000;
 const CAP_MULTIPLIER = 3;
 const MAX_AUCTIONS_PER_DAY = 3;
 const RELIST_COOLDOWN_MS = 30 * 60 * 1000;
-const INSURANCE_REFUND_RATE = 0.65;
 
 // used for bidIncrement/overtimeIncrement, which define the grid everything else lands on.
 function scaleAndRound(referenceValue: number, inflationRate: number): number {
@@ -34,8 +33,8 @@ function queryAsCardId(query: string | undefined): number | undefined {
 }
 
 export class AuctionCreateError extends Error {
-  // retryAfterMs is only set for reason 'cooldown'
-  constructor(public reason: 'auctions_disabled' | 'daily_limit' | 'rarity_not_configured' | 'not_owned' | 'cooldown' | 'insufficient_coins' | 'already_active', public retryAfterMs?: number) {
+  // retryAfterMs is only set for reason 'cooldown'. No 'insufficient_coins' - creating a listing is free.
+  constructor(public reason: 'auctions_disabled' | 'daily_limit' | 'rarity_not_configured' | 'not_owned' | 'cooldown' | 'already_active', public retryAfterMs?: number) {
     super(`createAuction failed: ${reason}`);
   }
 }
@@ -251,8 +250,8 @@ export class AuctionsDB {
     return { rows, total: totalCategories };
   })
 
-  // preview-only, no writes - uses the exact same formula createAuctionTx charges, so it never drifts from what actually gets deducted.
-  static previewListingFee = async (cardId: number, insured: boolean) => {
+  // preview-only, no writes - listing is free; saleFeeRate here is informational, charged only at settlement.
+  static previewAuctionTerms = async (cardId: number) => {
     const [state, cardRow] = await Promise.all([
       EconomyDB.getState(),
       db.select({ auctionBaseValue: rarities.auctionBaseValue }).from(cards).innerJoin(rarities, eq(rarities.id, cards.rarityId)).where(eq(cards.id, cardId)).limit(1).then(a => a?.[0]),
@@ -261,8 +260,7 @@ export class AuctionsDB {
 
     const bidIncrement = scaleAndRound(BID_UNIT, state.inflationRate);
     const startingBid = roundToGrid(cardRow.auctionBaseValue * state.inflationRate, bidIncrement);
-    const listingFeePaid = Math.round(startingBid * state.auctionListingFeeMultiplier * (insured ? state.auctionInsuranceFeeMultiplier : 1));
-    return { startingBid, capPrice: startingBid * CAP_MULTIPLIER, listingFeePaid };
+    return { startingBid, capPrice: startingBid * CAP_MULTIPLIER, saleFeeRate: state.auctionSaleFeeRate };
   }
 
   static getRecentBids = maybeTransaction('getRecentBids', async (client, auctionId: number, limit: number = 20) => {
@@ -275,9 +273,9 @@ export class AuctionsDB {
       .limit(limit);
   })
 
-  static createAuction = async (sellerId: number, cardId: number, insured: boolean) => {
+  static createAuction = async (sellerId: number, cardId: number) => {
     try {
-      const auction = await AuctionsDB.createAuctionTx(sellerId, cardId, insured);
+      const auction = await AuctionsDB.createAuctionTx(sellerId, cardId);
       return { ok: true as const, auction };
     } catch (e) {
       if (e instanceof AuctionCreateError) return { ok: false as const, reason: e.reason, retryAfterMs: e.retryAfterMs };
@@ -288,7 +286,7 @@ export class AuctionsDB {
     }
   }
 
-  private static createAuctionTx = maybeTransaction('createAuction', async (client, sellerId: number, cardId: number, insured: boolean) => {
+  private static createAuctionTx = maybeTransaction('createAuction', async (client, sellerId: number, cardId: number) => {
     const state = await client.select().from(economy).limit(1).then(r => r[0]!);
     if (!state.auctionsEnabled) throw new AuctionCreateError('auctions_disabled');
 
@@ -329,7 +327,6 @@ export class AuctionsDB {
     const overtimeIncrement = roundToGrid(OVERTIME_UNIT * state.inflationRate, bidIncrement);
     const startingBid = roundToGrid(cardRow.auctionBaseValue * state.inflationRate, bidIncrement);
     const capPrice = startingBid * CAP_MULTIPLIER;
-    const listingFeePaid = Math.round(startingBid * state.auctionListingFeeMultiplier * (insured ? state.auctionInsuranceFeeMultiplier : 1));
 
     // TOCTOU-safe: ownership + tradable + "at least 1 copy" folded into one conditional UPDATE, same shape as executeTrade's `decrement`.
     const [decremented] = await client
@@ -347,16 +344,12 @@ export class AuctionsDB {
         .where(and(eq(userCards.userId, sellerId), eq(userCards.cardId, cardId)));
     }
 
-    // seller pays listing fee AND startingBid up front; neither is refunded even on a sale (startingBid becomes treasury income at listing time - a sale's currentBid is a separate payout).
-    const paid = await EconomyDB.deductCoinsToTreasury(client, sellerId, listingFeePaid + startingBid);
-    if (!paid) throw new AuctionCreateError('insufficient_coins');
-
+    // listing is free - the seller pays nothing here; the sale commission (economy.auctionSaleFeeRate) is only taken out of currentBid at settlement, see settleAuction.
     const now = new Date();
     const [auction] = await client.insert(auctions).values({
       sellerId, cardId,
       tradable: decremented.tradable, customEmoji: decremented.customEmoji, customMediaUrl: decremented.customMediaUrl, customMediaType: decremented.customMediaType,
       startingBid, capPrice, bidIncrement, overtimeIncrement,
-      listingFeePaid, insured,
       expiresAt: new Date(now.getTime() + AUCTION_DURATION_MS),
     }).returning();
 
@@ -428,13 +421,19 @@ export class AuctionsDB {
   // shared settlement for placeBid's cap-hit path and the sweep/forceClose below - 'sold' assumes currentBid/currentBidderId are set, 'expired' assumes they aren't.
   private static async settleAuction(client: DrizzleClient, auction: Auction, outcome: 'sold' | 'expired'): Promise<Auction> {
     if (outcome === 'sold') {
-      await client.update(users).set({ coins: sql`${users.coins} + ${auction.currentBid}` }).where(eq(users.id, auction.sellerId));
+      // the bid was already fully debited from the bidder in placeBidTx - withhold the commission from it here, before paying out the seller.
+      const state = await client.select({ auctionSaleFeeRate: economy.auctionSaleFeeRate }).from(economy).limit(1).then(r => r[0]!);
+      const saleFeePaid = Math.round(auction.currentBid! * state.auctionSaleFeeRate);
+      const payout = auction.currentBid! - saleFeePaid;
+
+      await client.update(users).set({ coins: sql`${users.coins} + ${payout}` }).where(eq(users.id, auction.sellerId));
+      await EconomyDB.chargeAuctionSaleFee(client, auction.sellerId, saleFeePaid);
 
       // the winner is a different owner - fresh entry, no copy of the seller's tradable/custom* fields
       await client.insert(userCards).values({ userId: auction.currentBidderId!, cardId: auction.cardId, count: 1 })
         .onConflictDoUpdate({ target: [userCards.userId, userCards.cardId], set: { count: sql`${userCards.count} + 1` } });
 
-      const [updated] = await client.update(auctions).set({ status: 'sold', resolvedAt: new Date() }).where(eq(auctions.id, auction.id)).returning();
+      const [updated] = await client.update(auctions).set({ status: 'sold', saleFeePaid, resolvedAt: new Date() }).where(eq(auctions.id, auction.id)).returning();
       return updated!;
     }
 
@@ -451,11 +450,6 @@ export class AuctionsDB {
         customMediaType: sql`coalesce(${userCards.customMediaType}, excluded."customMediaType")`,
       },
     });
-
-    if (auction.insured) {
-      // insurance covers both the listing fee and the card's base value (startingBid), not just the fee.
-      await EconomyDB.refundCoinsFromTreasury(client, auction.sellerId, Math.round((auction.listingFeePaid + auction.startingBid) * INSURANCE_REFUND_RATE));
-    }
 
     const [updated] = await client.update(auctions).set({ status: 'expired', resolvedAt: new Date() }).where(eq(auctions.id, auction.id)).returning();
     return updated!;
@@ -505,13 +499,6 @@ export class AuctionsDB {
     // cancelling voids the sale outright, even with a live bid - refund that bidder in full, seller or admin cancel alike.
     if (auction.currentBidderId !== null && auction.currentBid !== null) {
       await client.update(users).set({ coins: sql`${users.coins} + ${auction.currentBid}` }).where(eq(users.id, auction.currentBidderId));
-    }
-
-    // admin cancel: not the seller's fault, refund the full listing fee. Self-cancel when insured: 65% of listing fee + startingBid, matching settleAuction's expired-insured refund.
-    if (asAdmin) {
-      await EconomyDB.refundCoinsFromTreasury(client, auction.sellerId, auction.listingFeePaid);
-    } else if (auction.insured) {
-      await EconomyDB.refundCoinsFromTreasury(client, auction.sellerId, Math.round((auction.listingFeePaid + auction.startingBid) * INSURANCE_REFUND_RATE));
     }
 
     const [updated] = await client.update(auctions).set({ status: 'cancelled', resolvedAt: new Date() }).where(eq(auctions.id, auctionId)).returning();

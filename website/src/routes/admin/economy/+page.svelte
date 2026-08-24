@@ -153,34 +153,28 @@
 		}
 	}
 
-	// --- /leiloar fees + kill switch ---
+	// --- /leiloar sale fee + kill switch ---
 
-	let listingFeePercent = $state(String((data.state.auctionListingFeeMultiplier - 1) * 100));
-	let insuranceFeePercent = $state(String((data.state.auctionInsuranceFeeMultiplier - 1) * 100));
-	let savingAuctionFees = $state(false);
+	let saleFeePercent = $state(String(data.state.auctionSaleFeeRate * 100));
+	let savingAuctionFee = $state(false);
 	let auctionsEnabled = $state(data.state.auctionsEnabled);
 	let togglingAuctions = $state(false);
 
-	async function saveAuctionFees() {
-		const listingPercent = Number(listingFeePercent);
-		const insurancePercent = Number(insuranceFeePercent);
-		if (isNaN(listingPercent) || isNaN(insurancePercent)) {
+	async function saveAuctionFee() {
+		const percent = Number(saleFeePercent);
+		if (isNaN(percent)) {
 			toast.error('Valor inválido');
 			return;
 		}
-		savingAuctionFees = true;
+		savingAuctionFee = true;
 		try {
-			const updated = await trpc().economy.setAuctionFees.mutate({
-				listingMultiplier: 1 + listingPercent / 100,
-				insuranceMultiplier: 1 + insurancePercent / 100,
-			});
-			listingFeePercent = String((updated.auctionListingFeeMultiplier - 1) * 100);
-			insuranceFeePercent = String((updated.auctionInsuranceFeeMultiplier - 1) * 100);
-			toast.success('Taxas do leilão atualizadas');
+			const updated = await trpc().economy.setAuctionSaleFeeRate.mutate({ rate: percent / 100 });
+			saleFeePercent = String(updated.auctionSaleFeeRate * 100);
+			toast.success('Taxa de venda do leilão atualizada');
 		} catch {
-			toast.error('Falha ao atualizar as taxas do leilão');
+			toast.error('Falha ao atualizar a taxa de venda do leilão');
 		} finally {
-			savingAuctionFees = false;
+			savingAuctionFee = false;
 		}
 	}
 
@@ -321,23 +315,16 @@
 	<p class="text-ink-dim mb-4 text-xs">
 		Interruptor de emergência - desativar bloqueia leilões e lances novos na hora, sem precisar de deploy. Leilões já a decorrer continuam a fechar normalmente.
 	</p>
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-		<label class="text-ink-dim text-xs" for="listingFee">
-			Taxa de publicação (a mais, sobre o valor-base da carta)
-			<div class="relative mt-1 w-24">
-				<input id="listingFee" type="text" inputmode="decimal" bind:value={listingFeePercent} class="field pr-6" />
-				<span class="text-ink-dim pointer-events-none absolute inset-y-0 right-3 flex items-center">%</span>
-			</div>
-		</label>
-		<label class="text-ink-dim text-xs" for="insuranceFee">
-			Taxa extra do seguro (a mais, sobre a taxa de publicação)
-			<div class="relative mt-1 w-24">
-				<input id="insuranceFee" type="text" inputmode="decimal" bind:value={insuranceFeePercent} class="field pr-6" />
-				<span class="text-ink-dim pointer-events-none absolute inset-y-0 right-3 flex items-center">%</span>
-			</div>
-		</label>
+	<label class="text-ink-dim text-xs" for="saleFee">
+		Taxa de venda (cobrada do vendedor sobre o valor recebido, só quando o leilão vende - criar um leilão é grátis)
+		<div class="relative mt-1 w-24">
+			<input id="saleFee" type="text" inputmode="decimal" bind:value={saleFeePercent} class="field pr-6" />
+			<span class="text-ink-dim pointer-events-none absolute inset-y-0 right-3 flex items-center">%</span>
+		</div>
+	</label>
+	<div>
+		<button class="btn btn-default mt-4" disabled={savingAuctionFee} onclick={saveAuctionFee}>Salvar</button>
 	</div>
-	<button class="btn btn-default mt-4" disabled={savingAuctionFees} onclick={saveAuctionFees}>Salvar</button>
 </div>
 
 <Modal bind:open={treasuryModalOpen} title="Editar tesouro">

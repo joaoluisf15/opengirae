@@ -48,7 +48,7 @@ describe("/lance", () => {
     const cardId = (await fx.card({ name: cardName, rarityId, subcategoryId })).id;
     await fx.ownCard(sellerId, cardId, 1);
     await CardsDB.setCardTradable(sellerId, cardId, true);
-    const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+    const result = await AuctionsDB.createAuction(sellerId, cardId);
     if (!result.ok) throw new Error(`fixture setup failed: ${result.reason}`);
     return result.auction;
   }
@@ -148,7 +148,7 @@ describe("/lance", () => {
     await fx.ownCard(ownSellerId, cardId, 1);
     await CardsDB.setCardTradable(ownSellerId, cardId, true);
     await setCoins(ownSellerId, 1_000_000);
-    const created = await AuctionsDB.createAuction(ownSellerId, cardId, false);
+    const created = await AuctionsDB.createAuction(ownSellerId, cardId);
     if (!created.ok) throw new Error('fixture setup failed');
 
     const workflowID = `test-lance-selfbid-${Bun.randomUUIDv7()}`;

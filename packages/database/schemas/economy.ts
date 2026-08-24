@@ -9,9 +9,8 @@ export const economy = pgTable("economy", {
   // watermark: treasuryBalance as of the last allocation sync - see EconomyDB.syncAllocations
   lastSyncedTreasuryBalance: bigint({ mode: 'number' }).notNull().default(0),
 
-  // /leiloar listing fee multipliers - "1 = 100%", same convention as inflationRate above.
-  auctionListingFeeMultiplier: doublePrecision().notNull().default(1.25),
-  auctionInsuranceFeeMultiplier: doublePrecision().notNull().default(1.10),
+  // /leiloar sale commission, charged at settlement not at listing time (0.10 = 10%)
+  auctionSaleFeeRate: doublePrecision().notNull().default(0.10),
   // emergency kill-switch: createAuction/placeBid refuse immediately when false, no deploy needed
   auctionsEnabled: boolean().notNull().default(true),
 

@@ -28,10 +28,10 @@ export const economyRouter = t.router({
 			return EconomyDB.getState();
 		}),
 
-	setAuctionFees: adminProcedure
-		.input(z.object({ listingMultiplier: z.number().positive().optional(), insuranceMultiplier: z.number().positive().optional() }))
+	setAuctionSaleFeeRate: adminProcedure
+		.input(z.object({ rate: z.number().min(0) }))
 		.mutation(async ({ input }) => {
-			await EconomyDB.setAuctionFees(input.listingMultiplier, input.insuranceMultiplier);
+			await EconomyDB.setAuctionSaleFeeRate(input.rate);
 			return EconomyDB.getState();
 		}),
 

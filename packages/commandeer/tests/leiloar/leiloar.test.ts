@@ -42,7 +42,7 @@ describe("/leiloar", () => {
     await fx.cleanup();
   });
 
-  test("creating: confirming publishes the auction and takes the card out of the seller's collection", async () => {
+  test("creating: confirming publishes the auction for free and takes the card out of the seller's collection", async () => {
     const platformId = 'test-leilao-cmd-create';
     const sellerId = (await fx.user({ displayName: "Test Leilao Cmd Create Seller", platform: 'telegram', platformId })).id;
     const cardId = (await fx.card({ name: "Test Leilao Cmd Create Card", rarityId, subcategoryId })).id;
@@ -56,36 +56,13 @@ describe("/leiloar", () => {
 
     await new Promise(r => setTimeout(r, 500)); // let it reach DBOS.recv and register the listener
     await DBOS.send(workflowID, { value: true }, 'leiloar:confirm');
-    await new Promise(r => setTimeout(r, 500)); // let it reach the insurance step's DBOS.recv
-    await DBOS.send(workflowID, { value: false }, 'leiloar:insurance');
     await handle.getResult();
 
     expect(await ownedCount(sellerId, cardId)).toBe(0);
+    expect(await db.select({ coins: users.coins }).from(users).where(eq(users.id, sellerId)).then(r => r[0]!.coins)).toBe(1_000_000);
     const [auction] = await db.select().from(auctions).where(eq(auctions.sellerId, sellerId));
     expect(auction?.cardId).toBe(cardId);
     expect(auction?.status).toBe('active');
-  });
-
-  test("creating: accepting the insurance step's second confirm creates an insured auction", async () => {
-    const platformId = 'test-leilao-cmd-insured';
-    const sellerId = (await fx.user({ displayName: "Test Leilao Cmd Insured Seller", platform: 'telegram', platformId })).id;
-    const cardId = (await fx.card({ name: "Test Leilao Cmd Insured Card", rarityId, subcategoryId })).id;
-    await fx.ownCard(sellerId, cardId, 1);
-    await CardsDB.setCardTradable(sellerId, cardId, true);
-    await setCoins(sellerId, 1_000_000);
-
-    const workflowID = `test-leilao-insured-${Bun.randomUUIDv7()}`;
-    const runCtx = fakeCtx({ name: 'leiloar', authorId: platformId, args: [String(cardId)], platform: 'telegram', workflowID });
-    const handle = await DBOS.startWorkflow(LeiloarCommand, { workflowID }).execute(runCtx, { rest: String(cardId) });
-
-    await new Promise(r => setTimeout(r, 500));
-    await DBOS.send(workflowID, { value: true }, 'leiloar:confirm');
-    await new Promise(r => setTimeout(r, 500));
-    await DBOS.send(workflowID, { value: true }, 'leiloar:insurance');
-    await handle.getResult();
-
-    const [auction] = await db.select().from(auctions).where(eq(auctions.sellerId, sellerId));
-    expect(auction?.insured).toBe(true);
   });
 
   test("creating: confirming a card that's not actually owned/tradable creates no auction", async () => {
@@ -101,8 +78,6 @@ describe("/leiloar", () => {
 
     await new Promise(r => setTimeout(r, 500));
     await DBOS.send(workflowID, { value: true }, 'leiloar:confirm');
-    await new Promise(r => setTimeout(r, 500)); // let it reach the insurance step's DBOS.recv
-    await DBOS.send(workflowID, { value: false }, 'leiloar:insurance');
     await handle.getResult();
 
     const created = await db.select().from(auctions).where(eq(auctions.sellerId, sellerId));
@@ -116,7 +91,7 @@ describe("/leiloar", () => {
     await fx.ownCard(sellerId, cardId, 1);
     await CardsDB.setCardTradable(sellerId, cardId, true);
     await setCoins(sellerId, 1_000_000);
-    const created = await AuctionsDB.createAuction(sellerId, cardId, false);
+    const created = await AuctionsDB.createAuction(sellerId, cardId);
     if (!created.ok) throw new Error('fixture setup failed');
 
     const otherPlatformId = 'test-leilao-cmd-cancel-stranger';

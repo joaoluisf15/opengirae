@@ -386,6 +386,20 @@
       "when": 1787521101762,
       "tag": "0054_plain_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1787604501024,
+      "tag": "0055_bent_magma",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1787604514209,
+      "tag": "0056_sparkling_black_tom",
+      "breakpoints": true
     }
   ]
 }

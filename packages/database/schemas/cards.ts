@@ -309,8 +309,8 @@ export const auctions = pgTable(
     currentBid: integer(),
     currentBidderId: integer().references(() => users.id),
 
-    listingFeePaid: integer().notNull(),
-    insured: boolean().notNull().default(false),
+    // set only once settled 'sold' - the commission taken out of currentBid at payout time
+    saleFeePaid: integer(),
 
     createdAt: timestamp().notNull().defaultNow(),
     expiresAt: timestamp().notNull(),

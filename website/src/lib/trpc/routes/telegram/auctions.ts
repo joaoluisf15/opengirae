@@ -37,15 +37,15 @@ export const telegramAuctionsRouter = t.router({
 		}),
 
 	create: telegramProcedure
-		.input(z.object({ cardId: z.number().int().positive(), insured: z.boolean().optional() }))
+		.input(z.object({ cardId: z.number().int().positive() }))
 		.mutation(async ({ ctx, input }) => {
 			const user = await requireUser(ctx.tgUser.id.toString());
-			return AuctionsDB.createAuction(user.id, input.cardId, input.insured ?? false);
+			return AuctionsDB.createAuction(user.id, input.cardId);
 		}),
 
-	previewFee: telegramProcedure
-		.input(z.object({ cardId: z.number().int().positive(), insured: z.boolean().optional() }))
-		.query(({ input }) => AuctionsDB.previewListingFee(input.cardId, input.insured ?? false)),
+	previewTerms: telegramProcedure
+		.input(z.object({ cardId: z.number().int().positive() }))
+		.query(({ input }) => AuctionsDB.previewAuctionTerms(input.cardId)),
 
 	bid: telegramProcedure
 		.input(z.object({ auctionId: z.number().int().positive(), amount: z.number().int().positive() }))

@@ -42,7 +42,7 @@ describe("/verleilao", () => {
     const cardId = (await fx.card({ name: cardName, rarityId, subcategoryId })).id;
     await fx.ownCard(sellerId, cardId, 1);
     await CardsDB.setCardTradable(sellerId, cardId, true);
-    const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+    const result = await AuctionsDB.createAuction(sellerId, cardId);
     if (!result.ok) throw new Error(`fixture setup failed: ${result.reason}`);
     return result.auction;
   }

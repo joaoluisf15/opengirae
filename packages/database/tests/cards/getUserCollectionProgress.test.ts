@@ -93,7 +93,7 @@ describe("CardsDB.getUserCollectionProgress", () => {
 
     await fx.ownCard(auctionUserId, cardId, 1);
     await CardsDB.setCardTradable(auctionUserId, cardId, true);
-    const created = await AuctionsDB.createAuction(auctionUserId, cardId, false);
+    const created = await AuctionsDB.createAuction(auctionUserId, cardId);
     if (!created.ok) throw new Error(`fixture setup failed: ${created.reason}`);
     fx.onCleanup(async () => { await db.delete(auctions).where(eq(auctions.id, created.auction.id)); });
 

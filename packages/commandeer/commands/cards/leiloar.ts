@@ -9,8 +9,6 @@ import { escapeMarkdown } from '@girae/common/utilities/markdown'
 import { EMOJI } from '../../constants'
 
 const CONFIRM_EVENT = 'leiloar:confirm'
-const INSURANCE_EVENT = 'leiloar:insurance'
-const INSURANCE_REFUND_RATE = 0.65
 
 // mirrors AuctionsDB.createAuction's reason union.
 const CREATE_FAILURE_MESSAGES: Record<string, string> = {
@@ -19,7 +17,6 @@ const CREATE_FAILURE_MESSAGES: Record<string, string> = {
   rarity_not_configured: '😅 Essa raridade ainda não está configurada pra leilão. Fala com a staff.',
   not_owned: '😂 Leiloa o quê? Você não tem esse card marcado como trocável (ou não tem ele).',
   // cooldown is handled dynamically below (needs the actual time remaining), not from this map.
-  insufficient_coins: '💸 Moedas insuficientes! E vamos de `/daily`, `/del` ou `/pix`?',
   already_active: `${EMOJI.auction} **OPS!** Este card já está em um leilão ativo.`,
 }
 
@@ -54,8 +51,9 @@ export default class LeiloarCommand extends Command {
     const user = await UsersDB.getUserByPlatformAccount(ctx.message.platform as 'telegram' | 'discord', ctx.message.author.id)
     if (!user) return
 
-    const preview = await AuctionsDB.previewListingFee(card.id, false)
+    const preview = await AuctionsDB.previewAuctionTerms(card.id)
     if (!preview) { await reply(ctx, CREATE_FAILURE_MESSAGES.rarity_not_configured!); return }
+    const saleFeePercent = Math.round(preview.saleFeeRate * 100)
 
     await reply(ctx, {
       content: [
@@ -65,9 +63,9 @@ export default class LeiloarCommand extends Command {
         '',
         `💵 **Lance inicial**: ${preview.startingBid} moedas`,
         `🚀 **Teto**: ${preview.capPrice} moedas`,
-        `🏷️ **Taxa de publicação**: ${preview.listingFeePaid} moedas`,
         '',
-        `💳 **Total a pagar**: ${preview.startingBid + preview.listingFeePaid} moedas`,
+        `🏷️ Quando vender, é cobrada uma taxa de **${saleFeePercent}%** sobre o valor recebido.`,
+        '',
         '⚠️ _A sua carta ficará bloqueada até o leilão terminar._',
       ].join('\n'),
       photoUrl: card.imageUrl ?? undefined,
@@ -80,24 +78,7 @@ export default class LeiloarCommand extends Command {
     if (confirmSelection?.messageId) await deleteMsg(ctx, confirmSelection.messageId)
     if (!confirmSelection?.value) { await reply(ctx, '_Leilão cancelado_'); return }
 
-    // re-preview rather than reuse `preview` - staff could've reconfigured the rarity while the user sat on the first confirm prompt.
-    const insuredPreview = await AuctionsDB.previewListingFee(card.id, true)
-    if (!insuredPreview) { await reply(ctx, CREATE_FAILURE_MESSAGES.rarity_not_configured!); return }
-    const insuranceFee = insuredPreview.listingFeePaid - preview.listingFeePaid
-    const insuranceRefund = Math.round((insuredPreview.listingFeePaid + preview.startingBid) * INSURANCE_REFUND_RATE)
-
-    await reply(ctx, {
-      content: `🛡️Quer pagar uma taxa de **${insuranceFee}** moedas para receber **${insuranceRefund}** moedas caso não haja licitantes?`,
-      eventName: INSURANCE_EVENT,
-      restricted: 'author',
-      options: [{ title: '✅ Sim', data: true, color: 'success' }, { title: '❌ Não', data: false }],
-    })
-
-    const insuranceSelection = await DBOS.recv<{ value: boolean, messageId?: string }>(INSURANCE_EVENT)
-    if (insuranceSelection?.messageId) await deleteMsg(ctx, insuranceSelection.messageId)
-    const insured = insuranceSelection?.value ?? false
-
-    const result = await AuctionsDB.createAuction(user.id, card.id, insured)
+    const result = await AuctionsDB.createAuction(user.id, card.id)
     if (!result.ok) {
       if (result.reason === 'cooldown') {
         const minutesLeft = Math.ceil((result.retryAfterMs ?? 0) / 60000)
@@ -133,17 +114,16 @@ export default class LeiloarCommand extends Command {
     if (details.auction.sellerId !== user.id) { await reply(ctx, 'Cancelar o que? este card não é seu 😂'); return }
     if (details.auction.status !== 'active') { await reply(ctx, '⏳ Este leilão já não está ativo.'); return }
 
-    const consequence = details.auction.insured
-      ? `você perderá a taxa de **${details.auction.listingFeePaid} moedas** e receberá de reembolso **${Math.round((details.auction.listingFeePaid + details.auction.startingBid) * INSURANCE_REFUND_RATE)} moedas** visto que pagou seguro`
-      : `você perderá a taxa de **${details.auction.listingFeePaid} moedas** paga pela publicação`
+    const bidWarning = details.auction.currentBidderId !== null
+      ? `\n\n💸 O lance de **${details.auction.currentBid} moedas** do maior licitante será devolvido a ele.`
+      : ''
 
     await reply(ctx, {
       content: [
         '⚠️ **Confirmar Cancelamento**',
         '',
         `Deseja cancelar o **Leilão \`${id}\` (${details.rarityEmoji} ${escapeMarkdown(details.cardName)})**?`,
-        '',
-        `💸 **Atenção:** Ao cancelar, ${consequence}.`,
+        bidWarning,
       ].join('\n'),
       eventName: CONFIRM_EVENT,
       restricted: 'author',
@@ -161,9 +141,6 @@ export default class LeiloarCommand extends Command {
       return
     }
 
-    const refundLine = result.auction.insured
-      ? `\n\n💳 **${Math.round((result.auction.listingFeePaid + result.auction.startingBid) * INSURANCE_REFUND_RATE)} moedas** creditadas na sua conta.`
-      : ''
-    await reply(ctx, `✅ **Leilão \`${id}\` cancelado.**\nCard devolvido à sua coleção!${refundLine}`)
+    await reply(ctx, `✅ **Leilão \`${id}\` cancelado.**\nCard devolvido à sua coleção!`)
   }
 }

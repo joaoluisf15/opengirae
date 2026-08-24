@@ -73,44 +73,25 @@ describe("AuctionsDB", () => {
   }
 
   describe("createAuction", () => {
-    test("happy path: charges the listing fee, removes the card from userCards, snapshots the auction row", async () => {
+    test("happy path: free to list, removes the card from userCards, snapshots the auction row", async () => {
       const { sellerId, cardId } = await freshTradableSellerCard("Test Leilao Card Happy");
 
       const state = await EconomyDB.getState();
       const expectedStartingBid = Math.round((10000 * state.inflationRate) / 500) * 500;
-      const expectedFee = Math.round(expectedStartingBid * state.auctionListingFeeMultiplier);
       const before = await getCoins(sellerId);
 
-      const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const result = await AuctionsDB.createAuction(sellerId, cardId);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(result.auction.startingBid).toBe(expectedStartingBid);
       expect(result.auction.capPrice).toBe(expectedStartingBid * 3);
-      expect(result.auction.listingFeePaid).toBe(expectedFee);
       expect(result.auction.status).toBe('active');
-      expect(result.auction.insured).toBe(false);
+      expect(result.auction.saleFeePaid).toBeNull();
 
-      // seller pays both the listing fee and startingBid up front - neither is ever refunded.
-      expect(await getCoins(sellerId)).toBe(before - expectedFee - expectedStartingBid);
+      // creating a listing costs nothing.
+      expect(await getCoins(sellerId)).toBe(before);
       expect(await getOwnedCount(sellerId, cardId)).toBe(0);
-    });
-
-    test("insured listing costs more than uninsured", async () => {
-      const { sellerId, cardId } = await freshTradableSellerCard("Test Leilao Card Insured");
-
-      const state = await EconomyDB.getState();
-      const startingBid = Math.round((10000 * state.inflationRate) / 500) * 500;
-      const uninsuredFee = Math.round(startingBid * state.auctionListingFeeMultiplier);
-      const insuredFee = Math.round(startingBid * state.auctionListingFeeMultiplier * state.auctionInsuranceFeeMultiplier);
-
-      const before = await getCoins(sellerId);
-      const insured = await AuctionsDB.createAuction(sellerId, cardId, true);
-      expect(insured.ok).toBe(true);
-      if (!insured.ok) return;
-      expect(insured.auction.listingFeePaid).toBe(insuredFee);
-      expect(insuredFee).toBeGreaterThan(uninsuredFee);
-      expect(await getCoins(sellerId)).toBe(before - insuredFee - startingBid);
     });
 
     test("startingBid/capPrice stay aligned to bidIncrement even at a non-1x inflation rate", async () => {
@@ -120,7 +101,7 @@ describe("AuctionsDB", () => {
       try {
         await EconomyDB.setInflationRate(1.75);
 
-        const created = await AuctionsDB.createAuction(sellerId, cardId, false);
+        const created = await AuctionsDB.createAuction(sellerId, cardId);
         expect(created.ok).toBe(true);
         if (!created.ok) return;
 
@@ -136,23 +117,12 @@ describe("AuctionsDB", () => {
       }
     });
 
-    test("insufficient coins: fails and rolls back the card removal", async () => {
-      const { sellerId, cardId } = await freshTradableSellerCard("Test Leilao Card Poor");
-      await setCoins(sellerId, 0);
-
-      const result = await AuctionsDB.createAuction(sellerId, cardId, false);
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.reason).toBe('insufficient_coins');
-      expect(await getOwnedCount(sellerId, cardId)).toBe(1);
-    });
-
     test("non-tradable card is rejected", async () => {
       const sellerId = await freshSeller();
       const cardId = await freshCard("Test Leilao Card NotTradable");
       await fx.ownCard(sellerId, cardId, 1); // not marked tradable
 
-      const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const result = await AuctionsDB.createAuction(sellerId, cardId);
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.reason).toBe('not_owned');
@@ -162,7 +132,7 @@ describe("AuctionsDB", () => {
       const sellerId = await freshSeller();
       const cardId = await freshCard("Test Leilao Card NotOwned");
 
-      const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const result = await AuctionsDB.createAuction(sellerId, cardId);
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.reason).toBe('not_owned');
@@ -175,7 +145,7 @@ describe("AuctionsDB", () => {
       await fx.ownCard(sellerId, card.id, 1);
       await CardsDB.setCardTradable(sellerId, card.id, true);
 
-      const result = await AuctionsDB.createAuction(sellerId, card.id, false);
+      const result = await AuctionsDB.createAuction(sellerId, card.id);
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.reason).toBe('rarity_not_configured');
@@ -184,11 +154,11 @@ describe("AuctionsDB", () => {
     test("a second copy of a card already in an active auction hits the partial unique index, not just the stock decrement", async () => {
       const { sellerId, cardId } = await freshTradableSellerCard("Test Leilao Card DoubleList", 2); // owns 2 copies, so a naive stock check alone wouldn't block a second listing
 
-      const first = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const first = await AuctionsDB.createAuction(sellerId, cardId);
       expect(first.ok).toBe(true);
       expect(await getOwnedCount(sellerId, cardId)).toBe(1);
 
-      const second = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const second = await AuctionsDB.createAuction(sellerId, cardId);
       expect(second.ok).toBe(false);
       if (second.ok) return;
       expect(second.reason).toBe('already_active');
@@ -204,14 +174,14 @@ describe("AuctionsDB", () => {
         const cardId = await freshCard(`Test Leilao Card DailyLimit ${i}`);
         await fx.ownCard(sellerId, cardId, 1);
         await CardsDB.setCardTradable(sellerId, cardId, true);
-        const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+        const result = await AuctionsDB.createAuction(sellerId, cardId);
         expect(result.ok).toBe(true);
       }
 
       const fourthCardId = await freshCard("Test Leilao Card DailyLimit 4th");
       await fx.ownCard(sellerId, fourthCardId, 1);
       await CardsDB.setCardTradable(sellerId, fourthCardId, true);
-      const fourth = await AuctionsDB.createAuction(sellerId, fourthCardId, false);
+      const fourth = await AuctionsDB.createAuction(sellerId, fourthCardId);
       expect(fourth.ok).toBe(false);
       if (fourth.ok) return;
       expect(fourth.reason).toBe('daily_limit');
@@ -220,13 +190,13 @@ describe("AuctionsDB", () => {
     test("cooldown blocks re-listing the same card right after an expiry", async () => {
       const { sellerId, cardId } = await freshTradableSellerCard("Test Leilao Card Cooldown");
 
-      const created = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const created = await AuctionsDB.createAuction(sellerId, cardId);
       expect(created.ok).toBe(true);
       if (!created.ok) return;
       await expireNow(created.auction.id);
       await AuctionsDB.sweepExpiredAuctions(new Date()); // resolves as 'expired', no bids
 
-      const retry = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const retry = await AuctionsDB.createAuction(sellerId, cardId);
       expect(retry.ok).toBe(false);
       if (retry.ok) return;
       expect(retry.reason).toBe('cooldown');
@@ -237,9 +207,9 @@ describe("AuctionsDB", () => {
   });
 
   describe("placeBid", () => {
-    async function freshAuction(cardName: string, opts: { insured?: boolean } = {}): Promise<Auction> {
+    async function freshAuction(cardName: string): Promise<Auction> {
       const { sellerId, cardId } = await freshTradableSellerCard(cardName);
-      const result = await AuctionsDB.createAuction(sellerId, cardId, opts.insured ?? false);
+      const result = await AuctionsDB.createAuction(sellerId, cardId);
       if (!result.ok) throw new Error(`fixture setup failed: ${result.reason}`);
       return result.auction;
     }
@@ -358,12 +328,15 @@ describe("AuctionsDB", () => {
       if (!tooHigh.ok) expect(tooHigh.reason).toBe('above_cap');
 
       const sellerBefore = await getCoins(auction.sellerId);
+      const state = await EconomyDB.getState();
       const atCap = await AuctionsDB.placeBid(auction.id, bidderId, auction.capPrice);
       expect(atCap.ok).toBe(true);
       if (!atCap.ok) return;
       expect(atCap.settled).toBe(true);
       expect(atCap.auction.status).toBe('sold');
-      expect(await getCoins(auction.sellerId)).toBe(sellerBefore + auction.capPrice);
+      const expectedFee = Math.round(auction.capPrice * state.auctionSaleFeeRate);
+      expect(atCap.auction.saleFeePaid).toBe(expectedFee);
+      expect(await getCoins(auction.sellerId)).toBe(sellerBefore + auction.capPrice - expectedFee);
       expect(await getOwnedCount(bidderId, auction.cardId)).toBe(1);
     });
 
@@ -405,50 +378,43 @@ describe("AuctionsDB", () => {
   });
 
   describe("sweepExpiredAuctions / settlement", () => {
-    async function freshAuction(cardName: string, opts: { insured?: boolean } = {}): Promise<Auction> {
+    async function freshAuction(cardName: string): Promise<Auction> {
       const { sellerId, cardId } = await freshTradableSellerCard(cardName);
-      const result = await AuctionsDB.createAuction(sellerId, cardId, opts.insured ?? false);
+      const result = await AuctionsDB.createAuction(sellerId, cardId);
       if (!result.ok) throw new Error(`fixture setup failed: ${result.reason}`);
       return result.auction;
     }
 
-    test("sold: moves coins to the seller and the card to the winner", async () => {
+    test("sold: moves the sale price minus the sale fee to the seller, and the card to the winner", async () => {
       const auction = await freshAuction("Test Leilao Sweep Sold");
       const bidderId = await freshSeller();
       await AuctionsDB.placeBid(auction.id, bidderId, auction.startingBid);
 
+      const state = await EconomyDB.getState();
       const sellerBefore = await getCoins(auction.sellerId);
       await expireNow(auction.id);
       await AuctionsDB.sweepExpiredAuctions(new Date());
 
       const row = await getAuctionRow(auction.id);
       expect(row.status).toBe('sold');
-      expect(await getCoins(auction.sellerId)).toBe(sellerBefore + auction.startingBid);
+      const expectedFee = Math.round(auction.startingBid * state.auctionSaleFeeRate);
+      expect(row.saleFeePaid).toBe(expectedFee);
+      expect(await getCoins(auction.sellerId)).toBe(sellerBefore + auction.startingBid - expectedFee);
       expect(await getOwnedCount(bidderId, auction.cardId)).toBe(1);
     });
 
-    test("expired without bids, uninsured: card returns, no fee refund", async () => {
-      const auction = await freshAuction("Test Leilao Sweep ExpiredNoInsurance");
-      const sellerCoinsAfterFee = await getCoins(auction.sellerId);
+    test("expired without bids: card returns, nothing charged either way (listing was free)", async () => {
+      const auction = await freshAuction("Test Leilao Sweep ExpiredNoBids");
+      const sellerCoinsBefore = await getCoins(auction.sellerId);
 
       await expireNow(auction.id);
       await AuctionsDB.sweepExpiredAuctions(new Date());
 
       const row = await getAuctionRow(auction.id);
       expect(row.status).toBe('expired');
+      expect(row.saleFeePaid).toBeNull();
       expect(await getOwnedCount(auction.sellerId, auction.cardId)).toBe(1);
-      expect(await getCoins(auction.sellerId)).toBe(sellerCoinsAfterFee); // no refund
-    });
-
-    test("expired without bids, insured: refunds 65% of the listing fee plus the card's base value", async () => {
-      const auction = await freshAuction("Test Leilao Sweep ExpiredInsured", { insured: true });
-      const sellerCoinsAfterFee = await getCoins(auction.sellerId);
-
-      await expireNow(auction.id);
-      await AuctionsDB.sweepExpiredAuctions(new Date());
-
-      const expectedRefund = Math.round((auction.listingFeePaid + auction.startingBid) * 0.65);
-      expect(await getCoins(auction.sellerId)).toBe(sellerCoinsAfterFee + expectedRefund);
+      expect(await getCoins(auction.sellerId)).toBe(sellerCoinsBefore);
     });
 
     test("a second sweep call is a safe no-op for an already-resolved auction", async () => {
@@ -492,30 +458,21 @@ describe("AuctionsDB", () => {
   });
 
   describe("cancelAuction", () => {
-    async function freshAuction(cardName: string, opts: { insured?: boolean } = {}): Promise<Auction> {
+    async function freshAuction(cardName: string): Promise<Auction> {
       const { sellerId, cardId } = await freshTradableSellerCard(cardName);
-      const result = await AuctionsDB.createAuction(sellerId, cardId, opts.insured ?? false);
+      const result = await AuctionsDB.createAuction(sellerId, cardId);
       if (!result.ok) throw new Error(`fixture setup failed: ${result.reason}`);
       return result.auction;
     }
 
-    test("seller can cancel before any bids, uninsured loses the fee", async () => {
-      const auction = await freshAuction("Test Leilao Cancel NoBidsUninsured");
+    test("seller can cancel before any bids - nothing was paid to list, so nothing to refund", async () => {
+      const auction = await freshAuction("Test Leilao Cancel NoBids");
       const before = await getCoins(auction.sellerId);
 
       const result = await AuctionsDB.cancelAuction(auction.id, auction.sellerId, { asAdmin: false });
       expect(result.ok).toBe(true);
       expect(await getOwnedCount(auction.sellerId, auction.cardId)).toBe(1);
       expect(await getCoins(auction.sellerId)).toBe(before);
-    });
-
-    test("seller cancel before any bids, insured recovers 65%", async () => {
-      const auction = await freshAuction("Test Leilao Cancel NoBidsInsured", { insured: true });
-      const before = await getCoins(auction.sellerId);
-
-      await AuctionsDB.cancelAuction(auction.id, auction.sellerId, { asAdmin: false });
-      const expectedRefund = Math.round((auction.listingFeePaid + auction.startingBid) * 0.65);
-      expect(await getCoins(auction.sellerId)).toBe(before + expectedRefund);
     });
 
     test("seller can cancel even with a live bid - the current bidder is refunded in full", async () => {
@@ -540,18 +497,18 @@ describe("AuctionsDB", () => {
       expect(result.reason).toBe('not_owner');
     });
 
-    test("admin can cancel even with a live bid - full refund on both sides", async () => {
+    test("admin can cancel even with a live bid - bidder refunded in full, seller unaffected", async () => {
       const auction = await freshAuction("Test Leilao Cancel Admin");
       const bidderId = await freshSeller();
       await AuctionsDB.placeBid(auction.id, bidderId, auction.startingBid);
 
       const bidderBefore = await getCoins(bidderId); // already debited the bid amount
-      const sellerBefore = await getCoins(auction.sellerId); // already debited the (uninsured) fee
+      const sellerBefore = await getCoins(auction.sellerId);
 
       const result = await AuctionsDB.cancelAuction(auction.id, 999999, { asAdmin: true });
       expect(result.ok).toBe(true);
       expect(await getCoins(bidderId)).toBe(bidderBefore + auction.startingBid);
-      expect(await getCoins(auction.sellerId)).toBe(sellerBefore + auction.listingFeePaid);
+      expect(await getCoins(auction.sellerId)).toBe(sellerBefore);
       expect(await getOwnedCount(auction.sellerId, auction.cardId)).toBe(1);
     });
   });
@@ -559,7 +516,7 @@ describe("AuctionsDB", () => {
   describe("forceCloseAuction", () => {
     async function freshAuction(cardName: string): Promise<Auction> {
       const { sellerId, cardId } = await freshTradableSellerCard(cardName);
-      const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const result = await AuctionsDB.createAuction(sellerId, cardId);
       if (!result.ok) throw new Error(`fixture setup failed: ${result.reason}`);
       return result.auction;
     }
@@ -588,7 +545,7 @@ describe("AuctionsDB", () => {
   describe("auctionsEnabled kill-switch", () => {
     test("blocks new listings and bids, but not resolving existing ones", async () => {
       const { sellerId, cardId } = await freshTradableSellerCard("Test Leilao KillSwitch");
-      const created = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const created = await AuctionsDB.createAuction(sellerId, cardId);
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
@@ -603,7 +560,7 @@ describe("AuctionsDB", () => {
         const otherCardId = await freshCard("Test Leilao KillSwitch Other");
         await fx.ownCard(sellerId, otherCardId, 1);
         await CardsDB.setCardTradable(sellerId, otherCardId, true);
-        const blockedCreate = await AuctionsDB.createAuction(sellerId, otherCardId, false);
+        const blockedCreate = await AuctionsDB.createAuction(sellerId, otherCardId);
         expect(blockedCreate.ok).toBe(false);
         if (!blockedCreate.ok) expect(blockedCreate.reason).toBe('auctions_disabled');
 
@@ -619,7 +576,7 @@ describe("AuctionsDB", () => {
   describe("notification outboxes", () => {
     async function freshAuction(cardName: string): Promise<Auction> {
       const { sellerId, cardId } = await freshTradableSellerCard(cardName);
-      const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const result = await AuctionsDB.createAuction(sellerId, cardId);
       if (!result.ok) throw new Error(`fixture setup failed: ${result.reason}`);
       return result.auction;
     }
@@ -689,14 +646,14 @@ describe("AuctionsDB", () => {
       const sellerA = await freshSeller();
       await fx.ownCard(sellerA, cardInSearchedSub.id, 1);
       await CardsDB.setCardTradable(sellerA, cardInSearchedSub.id, true);
-      const matching = await AuctionsDB.createAuction(sellerA, cardInSearchedSub.id, false);
+      const matching = await AuctionsDB.createAuction(sellerA, cardInSearchedSub.id);
       expect(matching.ok).toBe(true);
       if (!matching.ok) return;
 
       const sellerB = await freshSeller();
       await fx.ownCard(sellerB, cardElsewhere.id, 1);
       await CardsDB.setCardTradable(sellerB, cardElsewhere.id, true);
-      const nonMatching = await AuctionsDB.createAuction(sellerB, cardElsewhere.id, false);
+      const nonMatching = await AuctionsDB.createAuction(sellerB, cardElsewhere.id);
       expect(nonMatching.ok).toBe(true);
       if (!nonMatching.ok) return;
 
@@ -720,7 +677,7 @@ describe("AuctionsDB", () => {
 
     test("listActiveAuctions and listActiveAuctionsByCategory match a purely-numeric query against the card's id", async () => {
       const { sellerId, cardId } = await freshTradableSellerCard("Test Leilao Search ById");
-      const created = await AuctionsDB.createAuction(sellerId, cardId, false);
+      const created = await AuctionsDB.createAuction(sellerId, cardId);
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 

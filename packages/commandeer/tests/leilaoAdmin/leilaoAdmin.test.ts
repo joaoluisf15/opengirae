@@ -49,7 +49,7 @@ describe("leilão admin commands", () => {
     const cardId = (await fx.card({ name: cardName, rarityId, subcategoryId })).id;
     await fx.ownCard(sellerId, cardId, 1);
     await CardsDB.setCardTradable(sellerId, cardId, true);
-    const result = await AuctionsDB.createAuction(sellerId, cardId, false);
+    const result = await AuctionsDB.createAuction(sellerId, cardId);
     if (!result.ok) throw new Error(`fixture setup failed: ${result.reason}`);
     return result.auction;
   }
@@ -87,17 +87,16 @@ describe("leilão admin commands", () => {
     expect((await EconomyDB.getState()).auctionsEnabled).toBe(true);
   });
 
-  test("/setleilaotaxa updates only the targeted multiplier", async () => {
+  test("/setleilaotaxa updates the sale fee rate", async () => {
     const before = await EconomyDB.getState();
     try {
-      const ctx = fakeCtx({ name: 'setleilaotaxa', authorId: adminPlatformId, args: ['publicacao', '30'], platform: 'telegram' });
-      await SetLeilaoTaxaCommand.execute(ctx, { taxa: 'publicacao', percentagem: 30 });
+      const ctx = fakeCtx({ name: 'setleilaotaxa', authorId: adminPlatformId, args: ['30'], platform: 'telegram' });
+      await SetLeilaoTaxaCommand.execute(ctx, { percentagem: 30 });
 
       const after = await EconomyDB.getState();
-      expect(after.auctionListingFeeMultiplier).toBe(1.3);
-      expect(after.auctionInsuranceFeeMultiplier).toBe(before.auctionInsuranceFeeMultiplier); // untouched
+      expect(after.auctionSaleFeeRate).toBe(0.3);
     } finally {
-      await EconomyDB.setAuctionFees(before.auctionListingFeeMultiplier, before.auctionInsuranceFeeMultiplier);
+      await EconomyDB.setAuctionSaleFeeRate(before.auctionSaleFeeRate);
     }
   });
 });

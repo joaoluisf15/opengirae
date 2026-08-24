@@ -8,25 +8,17 @@ export default class SetLeilaoTaxaCommand extends Command {
   static override info = {
     guards: ['isAdmin'],
     name: 'setleilaotaxa',
-    description: 'Muda a taxa de publicação ou de seguro do /leiloar (staff)',
-    usage: '/setleilaotaxa <publicacao|seguro> <percentagem>',
+    description: 'Muda a taxa de venda do /leiloar, cobrada do vendedor quando o leilão vende (staff)',
+    usage: '/setleilaotaxa <percentagem>',
   }
 
   @CommandArgument([
-    {
-      name: 'taxa', type: CommandArgumentType.STRING, description: 'publicacao ou seguro',
-      guard: (value) => (value === 'publicacao' || value === 'seguro') ? true : 'Use `publicacao` ou `seguro`.',
-    },
-    { name: 'percentagem', type: CommandArgumentType.NUMBER, description: 'Percentagem a mais (ex: 25 pra +25%)' },
+    { name: 'percentagem', type: CommandArgumentType.NUMBER, description: 'Percentagem cobrada sobre o valor da venda (ex: 10 pra 10%)' },
   ])
-  static override async execute(ctx: IncomingCommand, args: { taxa: 'publicacao' | 'seguro'; percentagem: number }) {
-    const multiplier = 1 + args.percentagem / 100
-    const updated = args.taxa === 'publicacao'
-      ? await EconomyDB.setAuctionFees(multiplier, undefined)
-      : await EconomyDB.setAuctionFees(undefined, multiplier)
+  static override async execute(ctx: IncomingCommand, args: { percentagem: number }) {
+    const updated = await EconomyDB.setAuctionSaleFeeRate(args.percentagem / 100)
     if (!updated) { await reply(ctx, '😅 Não deu pra atualizar a taxa.'); return }
 
-    const label = args.taxa === 'publicacao' ? 'de publicação' : 'de seguro'
-    await reply(ctx, `${EMOJI.auction} Taxa ${label} do leilão agora é **+${args.percentagem}%** (publicação: ${updated.auctionListingFeeMultiplier}x, seguro: ${updated.auctionInsuranceFeeMultiplier}x).`)
+    await reply(ctx, `${EMOJI.auction} Taxa de venda do leilão agora é **${args.percentagem}%** (cobrada do vendedor quando o leilão vende).`)
   }
 }
