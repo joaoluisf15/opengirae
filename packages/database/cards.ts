@@ -985,6 +985,7 @@ export class CardsDB {
     return await client
       .select()
       .from(categories)
+      .orderBy(categories.id)
   })
 
   static getRarities = maybeTransaction('getRarities', async (client) => {
@@ -1330,6 +1331,7 @@ export class CardsDB {
         name: cards.name,
         rarityName: rarities.name,
         rarityEmoji: rarities.emoji,
+        categoryId: categories.id,
         categoryEmoji: categories.emoji,
         categoryName: categories.name,
         subcategoryName: subcategories.name,
@@ -1811,6 +1813,24 @@ export class CardsDB {
     return result.length
   })
 
+  // used by /trococat and /naotrococat, the collection-wide sibling of /troco and /naotroco.
+  static setSubcategoryCardsTradable = maybeTransaction('setSubcategoryCardsTradable', async (client, userId: number, subcategoryId: number, tradable: boolean) => {
+    const owned = await client
+      .select({ cardId: userCards.cardId })
+      .from(cardSubcategories)
+      .innerJoin(userCards, and(eq(userCards.cardId, cardSubcategories.cardId), eq(userCards.userId, userId)))
+      .where(eq(cardSubcategories.subcategoryId, subcategoryId))
+    const cardIds = owned.map(o => o.cardId)
+    if (cardIds.length === 0) return []
+
+    const result = await client
+      .update(userCards)
+      .set({ tradable })
+      .where(and(eq(userCards.userId, userId), inArray(userCards.cardId, cardIds)))
+      .returning({ cardId: userCards.cardId })
+    return result.map(r => r.cardId)
+  })
+
   static getUserTradableCards = maybeTransaction('getUserTradableCards', async (client, userId: number) => {
     return await client
       .select({
@@ -1819,6 +1839,8 @@ export class CardsDB {
         imageUrl: cards.imageUrl,
         rarityName: rarities.name,
         rarityEmoji: rarities.emoji,
+        categoryId: categories.id,
+        categoryName: categories.name,
         categoryEmoji: categories.emoji,
         subcategoryName: subcategories.name,
         ownedCount: userCards.count,
