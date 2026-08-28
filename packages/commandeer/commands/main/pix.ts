@@ -45,7 +45,7 @@ export default class PixCommand extends Command {
 
     const recipient = await UsersDB.getUserByPlatformAccount(platform, args.target)
     if (!recipient || recipient.isBanned) {
-      await reply(ctx, '💳 Pix recusado, sem cocuxa hoje…')
+      await reply(ctx, '💳 Pix recusado, sem coca hoje…')
       return
     }
 
@@ -66,7 +66,7 @@ export default class PixCommand extends Command {
     }
 
     if (amount < 0 || amount > sender.coins) {
-      await reply(ctx, '💳 Pix recusado, sem cocuxa hoje…')
+      await reply(ctx, '💳 Pix recusado, sem coca hoje…')
       return
     }
     if (amount < MIN_AMOUNT) {
@@ -91,7 +91,7 @@ export default class PixCommand extends Command {
 
     const ok = await UsersDB.transferCoins(sender.id, recipient.id, amount)
     if (!ok) {
-      await reply(ctx, '💳 Pix recusado, sem cocuxa hoje…')
+      await reply(ctx, '💳 Pix recusado, sem coca hoje…')
       return
     }
 
