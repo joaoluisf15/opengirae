@@ -100,6 +100,6 @@ export default class PixCommand extends Command {
     const dm = buildCtx(platform, args.target, recipient.displayName, args.target)
     await reply(dm, `💵 ${mention(platform, ctx.message.author.id, sender.displayName)} te fez um pix de **${amountFormatted}** moedas!`)
 
-    await reply(ctx, `💵 Pronto! O pix no valor de **${amountFormatted}** foram depositadas na conta de **${escapeMarkdown(recipient.displayName)}**.`)
+    await reply(ctx, `💵 Pronto! O pix no valor de **${amountFormatted}** foi depositado na conta de **${escapeMarkdown(recipient.displayName)}**.`)
   }
 }
