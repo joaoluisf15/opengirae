@@ -710,6 +710,63 @@ export class CardsDB {
     return await CardsDB.addUserCardWithClient(client, userId, cardId, incomeInflationRate);
   })
 
+  // grants `count` copies in one write instead of addUserCard's +1 looped N times.
+  static grantUserCards = maybeTransaction('grantUserCards', async (client, userId: number, cardId: number, count: number, incomeInflationRate: number) => {
+    const existing = await client
+      .select({ count: userCards.count })
+      .from(userCards)
+      .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)))
+      .limit(1)
+      .then(a => a?.[0]);
+    const previousCount = existing?.count ?? 0;
+
+    const user = await client
+      .select({ makeCardsTradeableByDefault: users.makeCardsTradeableByDefault })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+      .then(a => a?.[0]);
+
+    await client.insert(userCards)
+      .values({ userId, cardId, count, tradable: user?.makeCardsTradeableByDefault ?? false })
+      .onConflictDoUpdate({ target: [userCards.userId, userCards.cardId], set: { count: sql`${userCards.count} + ${count}` } });
+
+    const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
+    return { previousCount, newCount: previousCount + count, completedSubcategories };
+  })
+
+  // unlike discardUserCards, awards no coins - this is a confiscation, not a voluntary discard.
+  static removeUserCards = maybeTransaction('removeUserCards', async (client, userId: number, cardId: number, count: number): Promise<
+    { ok: true; remainingCount: number } | { ok: false }
+  > => {
+    const cardRow = await client
+      .select({ cativeiroThreshold: rarities.cativeiroThreshold })
+      .from(cards)
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .where(eq(cards.id, cardId))
+      .limit(1)
+      .then(a => a?.[0]);
+    if (!cardRow) return { ok: false };
+
+    const [updated] = await client
+      .update(userCards)
+      .set({ count: sql`${userCards.count} - ${count}` })
+      .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId), gte(userCards.count, count)))
+      .returning();
+    if (!updated) return { ok: false };
+
+    if (updated.count === 0) {
+      await client.delete(userCards).where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+    } else if (updated.count < cardRow.cativeiroThreshold) {
+      await client
+        .update(userCards)
+        .set({ customEmoji: null, customMediaUrl: null, customMediaType: null })
+        .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+    }
+
+    return { ok: true, remainingCount: updated.count };
+  })
+
   static executeTrade = maybeTransaction('executeTrade', async (
     client,
     userAId: number, offerA: { cardId: number; count: number }[],
