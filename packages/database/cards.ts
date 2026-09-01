@@ -710,6 +710,63 @@ export class CardsDB {
     return await CardsDB.addUserCardWithClient(client, userId, cardId, incomeInflationRate);
   })
 
+  // grants `count` copies in one write instead of addUserCard's +1 looped N times.
+  static grantUserCards = maybeTransaction('grantUserCards', async (client, userId: number, cardId: number, count: number, incomeInflationRate: number) => {
+    const existing = await client
+      .select({ count: userCards.count })
+      .from(userCards)
+      .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)))
+      .limit(1)
+      .then(a => a?.[0]);
+    const previousCount = existing?.count ?? 0;
+
+    const user = await client
+      .select({ makeCardsTradeableByDefault: users.makeCardsTradeableByDefault })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+      .then(a => a?.[0]);
+
+    await client.insert(userCards)
+      .values({ userId, cardId, count, tradable: user?.makeCardsTradeableByDefault ?? false })
+      .onConflictDoUpdate({ target: [userCards.userId, userCards.cardId], set: { count: sql`${userCards.count} + ${count}` } });
+
+    const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
+    return { previousCount, newCount: previousCount + count, completedSubcategories };
+  })
+
+  // unlike discardUserCards, awards no coins - this is a confiscation, not a voluntary discard.
+  static removeUserCards = maybeTransaction('removeUserCards', async (client, userId: number, cardId: number, count: number): Promise<
+    { ok: true; remainingCount: number } | { ok: false }
+  > => {
+    const cardRow = await client
+      .select({ cativeiroThreshold: rarities.cativeiroThreshold })
+      .from(cards)
+      .innerJoin(rarities, eq(rarities.id, cards.rarityId))
+      .where(eq(cards.id, cardId))
+      .limit(1)
+      .then(a => a?.[0]);
+    if (!cardRow) return { ok: false };
+
+    const [updated] = await client
+      .update(userCards)
+      .set({ count: sql`${userCards.count} - ${count}` })
+      .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId), gte(userCards.count, count)))
+      .returning();
+    if (!updated) return { ok: false };
+
+    if (updated.count === 0) {
+      await client.delete(userCards).where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+    } else if (updated.count < cardRow.cativeiroThreshold) {
+      await client
+        .update(userCards)
+        .set({ customEmoji: null, customMediaUrl: null, customMediaType: null })
+        .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
+    }
+
+    return { ok: true, remainingCount: updated.count };
+  })
+
   static executeTrade = maybeTransaction('executeTrade', async (
     client,
     userAId: number, offerA: { cardId: number; count: number }[],
@@ -733,6 +790,13 @@ export class CardsDB {
         .where(inArray(cards.id, allOfferedCardIds))
       : [];
     const thresholdByCardId = new Map(thresholds.map(t => [t.cardId, t.cativeiroThreshold]));
+
+    // needed so a newly-received card (no existing userCards row) respects the recipient's /autotroca default.
+    const tradeableDefaults = await client
+      .select({ id: users.id, makeCardsTradeableByDefault: users.makeCardsTradeableByDefault })
+      .from(users)
+      .where(inArray(users.id, [userAId, userBId]));
+    const defaultTradableByUserId = new Map(tradeableDefaults.map(u => [u.id, u.makeCardsTradeableByDefault]));
 
     const decrement = async (userId: number, cardId: number, count: number) => {
       const [row] = await client
@@ -774,7 +838,7 @@ export class CardsDB {
           .set({ count: sql`${userCards.count} + ${count}` })
           .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
       } else {
-        await client.insert(userCards).values({ userId, cardId, count });
+        await client.insert(userCards).values({ userId, cardId, count, tradable: defaultTradableByUserId.get(userId) ?? false });
       }
 
       const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
@@ -829,6 +893,13 @@ export class CardsDB {
       : [];
     const thresholdByCardId = new Map(thresholds.map(t => [t.cardId, t.cativeiroThreshold]));
 
+    // needed so a newly-received card (no existing userCards row) respects the recipient's /autotroca default.
+    const tradeableDefaults = await client
+      .select({ id: users.id, makeCardsTradeableByDefault: users.makeCardsTradeableByDefault })
+      .from(users)
+      .where(inArray(users.id, [userAId, userBId]));
+    const defaultTradableByUserId = new Map(tradeableDefaults.map(u => [u.id, u.makeCardsTradeableByDefault]));
+
     const decrementCard = async (userId: number, cardId: number, count: number) => {
       const [row] = await client
         .update(userCards)
@@ -866,7 +937,7 @@ export class CardsDB {
           .set({ count: sql`${userCards.count} + ${count}` })
           .where(and(eq(userCards.userId, userId), eq(userCards.cardId, cardId)));
       } else {
-        await client.insert(userCards).values({ userId, cardId, count });
+        await client.insert(userCards).values({ userId, cardId, count, tradable: defaultTradableByUserId.get(userId) ?? false });
       }
 
       const completedSubcategories = await CardsDB.claimCompletionsForCardGain(client, userId, cardId, incomeInflationRate);
@@ -1648,10 +1719,14 @@ export class CardsDB {
       .then(a => a?.[0]));
   })
 
+  // viewerId (optional) is whoever is looking at this list, not necessarily userId - lets a
+  // caller show "how many of this I already own" next to a card on someone else's wishlist,
+  // same as CardsDB.compareWishlists' ownedCount. -1 (no real user has this id) keeps the join
+  // a no-op instead of branching the query shape when the caller doesn't pass one.
   static getWishlist = maybeTransaction('getWishlist', async (
-    client, userId: number, opts: { query?: string; limit?: number; offset?: number } = {},
+    client, userId: number, opts: { query?: string; limit?: number; offset?: number; viewerId?: number } = {},
   ) => {
-    const { query, limit = 20, offset = 0 } = opts;
+    const { query, limit = 20, offset = 0, viewerId } = opts;
     const where = query
       ? and(eq(wishlist.userId, userId), ilike(cards.name, `%${query}%`))
       : eq(wishlist.userId, userId);
@@ -1667,6 +1742,7 @@ export class CardsDB {
           categoryEmoji: categories.emoji,
           categoryName: categories.name,
           subcategoryName: subcategories.name,
+          viewerOwnedCount: sql<number>`COALESCE(${userCards.count}, 0)`,
         })
         .from(wishlist)
         .innerJoin(cards, eq(cards.id, wishlist.cardId))
@@ -1674,6 +1750,7 @@ export class CardsDB {
         .leftJoin(cardSubcategories, and(eq(cardSubcategories.cardId, cards.id), eq(cardSubcategories.isMain, true)))
         .leftJoin(subcategories, eq(subcategories.id, cardSubcategories.subcategoryId))
         .leftJoin(categories, eq(categories.id, subcategories.categoryId))
+        .leftJoin(userCards, and(eq(userCards.cardId, cards.id), eq(userCards.userId, viewerId ?? -1)))
         .where(where)
         .orderBy(wishlist.position, cards.id)
         .limit(limit)
